@@ -51,7 +51,10 @@ await esbuild.build({
   logLevel: 'warning',
 });
 
-for (const file of ['manifest.json', '_locales', 'visualizer.html', 'visualizer.css', 'icons']) {
+// The manifest is only called manifest.json in dist/. Otherwise src/ could be loaded as an extension by mistake,
+// and it fails there because the modules are not bundled.
+await cp('src/manifest.template.json', 'dist/manifest.json');
+for (const file of ['_locales', 'visualizer.html', 'visualizer.css', 'icons']) {
   await cp(`src/${file}`, `dist/${file}`, { recursive: true });
 }
 await writeFile('dist/presets.js', await buildPresets());

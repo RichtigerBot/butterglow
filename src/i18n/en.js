@@ -46,6 +46,7 @@ export default {
   status: {
     visualizerFailed: '{name} could not start: {error}',
     clickToStart: 'Click to start the sound',
+    startFailed: 'ButterGlow could not start: {error}',
     cannotCapture: 'This tab cannot be captured: {error}',
     streamEnded: 'Capture has ended because the tab was closed.',
     startFromIcon: 'Please start from the extension icon in a tab that plays music.',

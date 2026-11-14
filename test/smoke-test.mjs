@@ -65,6 +65,7 @@ try {
   await page.setViewport({ width: 800, height: 450 });
   await page.goto(`${baseUrl}?demo=1`);
   await page.waitForFunction(() => document.getElementById('hud-title').textContent === 'Milkdrop', { timeout: 30000 });
+  check('The notice for a failed start is removed', await page.evaluate(() => !document.getElementById('startup-failed')));
 
   // Without a user click Chrome suspends audio; the page then has to ask for a click.
   const blocked = await page.evaluate(() => app.engine.context.state !== 'running');
@@ -934,7 +935,9 @@ try {
         original.call(this, frame);
         counts[this.drewLastFrame ? 'drawn' : 'skipped']++;
       };
-      await new Promise((done) => setTimeout(done, 1000));
+      // At least 20 frames: with slow software rendering one second is sometimes only a handful.
+      const until = performance.now() + 8000;
+      while (counts.drawn + counts.skipped < 20 && performance.now() < until) await new Promise((done) => setTimeout(done, 100));
       instance.render = original;
       select.value = '60';
       select.dispatchEvent(new Event('change', { bubbles: true }));

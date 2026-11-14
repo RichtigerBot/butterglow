@@ -29,7 +29,8 @@ ButterGlow is not in the Chrome Web Store yet. It is installed as an unpacked ex
 ### From a release
 
 1. Download `butterglow-<version>.zip` from the [latest release](https://github.com/RichtigerBot/butterglow/releases/latest)
-   and extract it into a folder you keep (Chrome loads the extension from there).
+   and extract it into a folder you keep (Chrome loads the extension from there). Not "Source code": that is the
+   unbuilt project and does not run as an extension.
 2. Open `chrome://extensions` and switch on **Developer mode**.
 3. Click **Load unpacked** and choose the extracted folder.
 4. Play music in any tab and click the ButterGlow icon in the toolbar.

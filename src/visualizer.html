@@ -175,6 +175,15 @@
 
     <button id="status" hidden></button>
 
+    <!-- Only appears if the script never runs (it removes this element first thing). No JavaScript, so both languages. -->
+    <div id="startup-failed" role="alert">
+      <p><strong>ButterGlow did not start.</strong> Load the extracted release zip (<code>butterglow-&lt;version&gt;.zip</code>)
+        or the built <code>dist/</code> folder, not the source code. Details: right-click → Inspect → Console.</p>
+      <p lang="de"><strong>ButterGlow ist nicht gestartet.</strong> Lade die entpackte Release-ZIP
+        (<code>butterglow-&lt;version&gt;.zip</code>) oder den gebauten Ordner <code>dist/</code>, nicht den Quellcode.
+        Details: Rechtsklick → Untersuchen → Konsole.</p>
+    </div>
+
     <script type="module" src="visualizer.js"></script>
   </body>
 </html>

@@ -532,4 +532,9 @@ globalThis.app = {
   },
 };
 
-start();
+// All modules have loaded once this line runs, so the notice for a failed start is not needed.
+document.getElementById('startup-failed')?.remove();
+start().catch((error) => {
+  console.error(error);
+  showStatus(() => t('status.startFailed', { error: error.message }));
+});

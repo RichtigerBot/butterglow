@@ -16,7 +16,7 @@ reload button of the extension in `chrome://extensions`.
 
 | Folder | Contents |
 |---|---|
-| `src/` | The extension: manifest, background worker, visualizer page |
+| `src/` | The extension: manifest (`manifest.template.json`, becomes `dist/manifest.json`), background worker, visualizer page |
 | `src/audio/` | Audio chain, beat and section detection |
 | `src/visualizers/` | Milkdrop and the built-in visualizers |
 | `src/effects/` | Water surfaces |
@@ -61,7 +61,7 @@ allowed to share.
 
 ## Releases
 
-1. Raise `version` in both `src/manifest.json` and `package.json` (the packer refuses mismatching versions).
+1. Raise `version` in both `src/manifest.template.json` and `package.json` (the packer refuses mismatching versions).
 2. Run `npm test`, then `npm run package`. The result is `release/butterglow-<version>.zip`.
 3. Commit, tag the commit as `v<version>` and push the tag.
 4. On GitHub, create a release from the tag and attach the zip file.
