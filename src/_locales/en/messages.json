@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "ButterGlow",
+    "description": "Name of the extension"
+  },
+  "extDescription": {
+    "message": "Turns the music in a browser tab into a light show: Milkdrop presets, own visualizers and an equalizer.",
+    "description": "Description in the Chrome extensions page and the Web Store"
+  },
+  "actionTitle": {
+    "message": "Start the visualizer for this tab",
+    "description": "Tooltip of the toolbar icon"
+  }
+}

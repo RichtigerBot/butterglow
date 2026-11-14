@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "ButterGlow"
+  },
+  "extDescription": {
+    "message": "Macht aus der Musik in einem Browser-Tab eine Lichtshow: Milkdrop-Presets, eigene Visualizer und ein Equalizer."
+  },
+  "actionTitle": {
+    "message": "Visualizer für diesen Tab starten"
+  }
+}

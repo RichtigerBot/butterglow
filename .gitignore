@@ -1,0 +1,18 @@
+# Dependencies and build output (recreated by npm install / npm run build)
+node_modules/
+dist/
+
+# Test output
+test-output/
+
+# Local notes, own presets and editor/assistant settings – never published
+local/
+.claude/
+CLAUDE.md
+*.tmp.mjs
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

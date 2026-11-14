@@ -1,0 +1,42 @@
+{
+  "name": "butterglow",
+  "version": "0.1.0",
+  "description": "Chrome extension that turns the music in a browser tab into a light show: Milkdrop presets, own visualizers, beat and drop detection and an equalizer.",
+  "author": "RichtigerBot",
+  "license": "MIT",
+  "homepage": "https://github.com/RichtigerBot/butterglow#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RichtigerBot/butterglow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RichtigerBot/butterglow/issues"
+  },
+  "keywords": [
+    "chrome-extension",
+    "music-visualizer",
+    "milkdrop",
+    "butterchurn",
+    "equalizer",
+    "web-audio",
+    "beat-detection"
+  ],
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && node --test test/quality.test.mjs test/beat-detector.test.mjs test/section-detector.test.mjs test/auto-switch.test.mjs test/water-surface.test.mjs test/water-waves.test.mjs test/preset-library.test.mjs test/preset-model.test.mjs test/milk-format.test.mjs test/crossfade.test.mjs test/i18n.test.mjs && node test/smoke-test.mjs && node test/player-test.mjs",
+    "previews": "npm run build && node scripts/make-previews.mjs && npm run build"
+  },
+  "dependencies": {
+    "butterchurn": "3.0.0-beta.5",
+    "butterchurn-presets": "3.0.0-beta.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "puppeteer-core": "^25.16.0"
+  }
+}

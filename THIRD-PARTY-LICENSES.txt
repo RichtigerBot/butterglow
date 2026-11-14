@@ -1,0 +1,121 @@
+ButterGlow – Third-party licenses
+================================
+
+ButterGlow itself is released under the MIT License (see LICENSE).
+
+The browser extension bundles the components listed below. Each keeps its own
+license; the full license texts follow. Tools that are only used to build and
+test the project (esbuild, puppeteer-core and their dependencies) are not part
+of the extension and are not listed here.
+
+
+Overview
+--------
+
+  Component            Version         License   Used for
+  -------------------  --------------  --------  ----------------------------------
+  butterchurn          3.0.0-beta.5    MIT       Milkdrop rendering engine (WebGL)
+  butterchurn-presets  3.0.0-beta.4    MIT       Milkdrop presets and textures
+  eel-wasm             0.0.16          MIT       Compiles preset equations to WebAssembly
+
+
+Milkdrop presets
+----------------
+
+The presets in butterchurn-presets were created by many authors of the
+MilkDrop community (for example Geiss, martin, Flexi, Rovastar, Zylot and
+others). Their names are part of each preset's title. The collection is
+distributed by Jordan Berg under the MIT License below; the individual presets
+remain the creative work of their authors.
+
+Presets saved by the preset editor whose file name ends in "(bearbeitet)" are
+edited versions of these presets. The original title and author are kept in the file
+name and in the "butterchurn_based_on" entry inside the file.
+
+
+===========================================================================
+butterchurn
+https://github.com/jberg/butterchurn
+===========================================================================
+
+MIT License
+
+Copyright (c) 2013-2018 Jordan Berg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+===========================================================================
+butterchurn-presets
+https://butterchurnviz.com
+===========================================================================
+
+MIT License
+
+Copyright (c) 2013-2018 Jordan Berg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+===========================================================================
+eel-wasm
+https://github.com/captbaritone/eel-wasm
+===========================================================================
+
+MIT License
+
+Copyright (c) Jordan Eldredge
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+(The eel-wasm package ships without a license file. License and author are
+taken from its package.json: "license": "MIT",
+"author": "Jordan Eldredge".)

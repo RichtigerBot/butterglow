@@ -1,0 +1,1812 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+}
+
+html,
+body,
+#stage {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #05030f;
+}
+
+#stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#stage {
+  position: relative;
+  isolation: isolate;
+}
+
+#water {
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 0.3s ease; /* when switching visualizers with Milkdrop */
+}
+
+#stage canvas[hidden] {
+  display: none;
+}
+
+/* Alt: hide all menus until Alt or Escape brings them back. The mouse does not show them again. */
+body.menus-hidden {
+  cursor: none;
+}
+
+body.menus-hidden :is(#hud, #debug, #player, #preset-browser, .preset-editor, #equalizer, #status) {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+body.idle {
+  cursor: none;
+}
+
+#hud {
+  position: fixed;
+  z-index: 3; /* above the player, in case both touch */
+  left: 24px;
+  bottom: 24px;
+  box-sizing: border-box;
+  width: min(352px, calc(100vw - 48px)); /* as wide as the menu; the menu sets the width */
+  padding: 12px 16px;
+  border-radius: 12px;
+  color: #fff;
+  background: rgb(5 3 15 / 65%);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.4s;
+}
+
+body.idle #hud:not(.pinned) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#hud-menu {
+  max-height: calc(100vh - 340px); /* room for title, beat display and key hints below */
+  overflow-y: auto;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 15%);
+}
+
+#hud-menu[hidden] {
+  display: none;
+}
+
+#hud-menu h3 {
+  margin: 12px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 5px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.setting output {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.setting input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+  accent-color: #ff4fd8;
+}
+
+.setting input[type='checkbox'] {
+  accent-color: #4fd8ff;
+}
+
+.setting select {
+  max-width: 170px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  background: rgb(255 255 255 / 12%);
+}
+
+.setting-custom-wrap {
+  grid-column: 2;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setting-custom-wrap[hidden] {
+  display: none;
+}
+
+.setting-custom {
+  width: 72px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  font: inherit;
+  text-align: right;
+}
+
+.setting-unit {
+  opacity: 0.7;
+}
+
+.setting select option {
+  background: #16102c;
+}
+
+#hud-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  background: rgb(255 255 255 / 10%);
+  cursor: pointer;
+  transition: opacity 0.4s, background 0.15s;
+}
+
+.hud-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s;
+}
+
+#hud-menu-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+/* Key hints switched off: icon fainter. */
+#hud-keys-toggle[aria-pressed='false'] svg {
+  opacity: 0.45;
+}
+
+#hud-pin[aria-pressed='true'] {
+  color: #05030f;
+  background: #4fd8ff;
+}
+
+/* Without mouse movement, a pinned menu only keeps the display; the icons disappear. */
+body.idle .hud-icon {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hud-icon:focus-visible,
+.setting input:focus-visible,
+.setting select:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+#hud-title {
+  flex: 1;
+  margin-right: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#hud-preset {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+#hud-preset[hidden] {
+  display: none;
+}
+
+#hud-subtitle {
+  min-width: 0;
+  max-width: 360px;
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.hud-small {
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  flex: none;
+  background: transparent;
+}
+
+.hud-small:hover {
+  background: rgb(255 255 255 / 12%);
+}
+
+.hud-star[aria-pressed='true'] {
+  color: #ffd84f;
+}
+
+.hud-star[aria-pressed='true'] svg {
+  fill: currentColor;
+}
+
+#hud-browse[aria-expanded='true'] {
+  color: #05030f;
+  background: #4fd8ff;
+}
+
+#hud-beat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+#hud-beat span[id^='light-'] {
+  padding: 2px 8px;
+  border-radius: 999px;
+  opacity: 0.25;
+  background: #ff4fd8;
+}
+
+#light-snare {
+  background: #4fd8ff !important;
+  color: #05030f;
+}
+
+#light-hat {
+  background: #ffe14f !important;
+  color: #05030f;
+}
+
+#hud-bpm {
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+#hud-section {
+  min-width: 52px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  opacity: 0.85;
+  transition: background-color 0.6s, color 0.6s;
+}
+
+#hud-section[data-section='build'] {
+  background: rgb(255 170 60 / 25%);
+}
+
+#hud-section[data-section='drop'] {
+  background: rgb(255 70 120 / 35%);
+}
+
+/* Briefly bright at the moment of the drop, then the colour glides back. */
+#hud-section.dropped {
+  background: #ff4f8b;
+  color: #05030f;
+  transition: none;
+}
+
+/* Key hints as a grid in two columns, so they do not stretch the overlay in width. */
+#hud-keys {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px 12px;
+  max-height: 140px;
+  margin-top: 10px;
+  padding-top: 8px;
+  overflow: hidden;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  font-size: 12px;
+  opacity: 0.7;
+  transition: opacity 0.4s, max-height 0.4s, margin 0.4s, padding 0.4s;
+}
+
+#hud-keys span {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#hud-keys kbd {
+  text-align: center;
+}
+
+/* Like the pin: without mouse movement the key hints disappear too. Off entirely via the keyboard button. */
+#hud.no-keys #hud-keys,
+body.idle #hud-keys {
+  max-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+  border-top-width: 0;
+  opacity: 0;
+}
+
+kbd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font: inherit;
+  background: rgb(255 255 255 / 15%);
+}
+
+#equalizer {
+  position: fixed;
+  z-index: 4; /* open panels lie above the player */
+  top: 24px;
+  right: 24px;
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: 14px;
+  color: #fff;
+  background: rgb(5 3 15 / 78%);
+  backdrop-filter: blur(12px);
+}
+
+#equalizer[hidden] {
+  display: none;
+}
+
+#equalizer header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#equalizer h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+#eq-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#eq-enabled {
+  accent-color: #4fd8ff;
+}
+
+#eq-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  background: rgb(255 255 255 / 10%);
+  cursor: pointer;
+}
+
+#eq-curve {
+  display: block;
+  width: 100%;
+  height: 96px;
+  margin-top: 12px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 5%);
+}
+
+#eq-sliders {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  margin-top: 12px;
+}
+
+#equalizer.bypassed #eq-sliders,
+#equalizer.bypassed #eq-bass {
+  opacity: 0.45;
+}
+
+#eq-bass {
+  display: grid;
+  grid-template-columns: auto 1fr 4.5em;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+#eq-bass input {
+  width: 100%;
+  accent-color: #ff4fd8;
+}
+
+#eq-bass output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.eq-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.eq-band output {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.eq-band span {
+  opacity: 0.7;
+}
+
+.eq-band input {
+  width: 22px;
+  height: 130px;
+  margin: 0;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  accent-color: #ff4fd8;
+  cursor: pointer;
+}
+
+#eq-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+#eq-presets button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  background: rgb(255 255 255 / 12%);
+  cursor: pointer;
+}
+
+#eq-presets button.active {
+  color: #05030f;
+  background: #4fd8ff;
+}
+
+#equalizer button:focus-visible,
+#equalizer input:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+#status {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  max-width: min(560px, calc(100vw - 48px));
+  padding: 16px 24px;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  background: #2a1a5e;
+}
+
+#status:enabled {
+  cursor: pointer;
+}
+
+/* Preset browser: always as a panel on the right edge. */
+#preset-browser {
+  position: fixed;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 13px;
+  background: rgb(10 7 26 / 88%);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+}
+
+/* When hidden, the browser stays in the layout, only invisible and not drawn (content-visibility: hidden keeps
+   its state). So the whole list does not have to be rebuilt when opening. */
+#preset-browser[hidden] {
+  visibility: hidden;
+  content-visibility: hidden;
+  pointer-events: none;
+}
+
+#preset-browser {
+  top: 24px;
+  right: 24px;
+  bottom: 24px;
+  width: min(380px, calc(100vw - 48px));
+  transition: right 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* If several panels stand side by side, side-panels.js sets the offset to the right. */
+
+
+
+#preset-browser header,
+#pb-name-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#preset-browser select,
+#preset-browser input[type='text'],
+#pb-search {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  background: rgb(255 255 255 / 12%);
+}
+
+#pb-collection {
+  flex: 1;
+}
+
+#pb-collection option {
+  background: #16102c;
+}
+
+#pb-name-form[hidden],
+#pb-note[hidden],
+#pb-folder[hidden],
+.pb-tool[hidden] {
+  display: none;
+}
+
+#pb-name-form input {
+  flex: 1;
+}
+
+#pb-name-form button,
+.pb-tool {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  background: rgb(255 255 255 / 12%);
+  cursor: pointer;
+}
+
+.pb-tool:hover,
+#pb-name-form button:hover {
+  background: rgb(255 255 255 / 22%);
+}
+
+#pb-note {
+  margin: 0;
+  opacity: 0.75;
+}
+
+#pb-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pb-folder-text {
+  flex: 1;
+  opacity: 0.75;
+}
+
+#pb-folder[data-state='prompt'] .pb-folder-text,
+#pb-folder .pb-folder-text.problem {
+  color: #ffc84f;
+  opacity: 1;
+}
+
+.pb-folder-action,
+.pb-folder-open,
+.pb-backup {
+  flex: none;
+}
+
+#pb-list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pb-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+  /* Only visible entries are drawn. The list has up to 500 entries with preview images. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 46px;
+}
+
+.pb-entry:hover,
+.pb-entry.playing {
+  background: rgb(255 255 255 / 9%);
+}
+
+.pb-entry.playing {
+  box-shadow: inset 3px 0 #ff4fd8;
+}
+
+.pb-select {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: none;
+  cursor: pointer;
+}
+
+.pb-thumb {
+  width: 64px;
+  height: 36px;
+  flex: none;
+  border-radius: 4px;
+  background: center / cover no-repeat #000;
+}
+
+.pb-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.pb-title,
+.pb-author {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pb-author {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.pb-badge {
+  font-size: 10px;
+  color: #7fe3c4;
+}
+
+.pb-star,
+.pb-add {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 16px;
+  background: none;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.pb-star:hover,
+.pb-add:hover {
+  opacity: 1;
+  background: rgb(255 255 255 / 12%);
+}
+
+.pb-star[aria-pressed='true'] {
+  color: #ffd84f;
+  opacity: 1;
+}
+
+.pb-menu {
+  position: absolute;
+  z-index: 1;
+  top: 100%;
+  right: 4px;
+  display: flex;
+  min-width: 220px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #1b1438;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
+}
+
+.pb-menu-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.pb-menu-empty {
+  margin: 2px 4px;
+  opacity: 0.6;
+}
+
+.pb-menu-create {
+  margin-top: 4px;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  background: rgb(255 255 255 / 10%);
+  cursor: pointer;
+}
+
+/* Media player: glass box, position selectable in the menu. */
+#player {
+  position: fixed;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: min(440px, calc(100vw - 48px));
+  padding: 12px 14px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 18px;
+  color: #fff;
+  font-size: 13px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 16%), rgb(255 255 255 / 5%));
+  backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 35%), inset 0 1px 0 rgb(255 255 255 / 25%);
+  transition: opacity 0.4s;
+}
+
+#player[hidden] {
+  display: none;
+}
+
+#player.at-bottom {
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* On narrow screens the player at the bottom centre would cover the overlay at the bottom left. */
+@media (max-width: 1440px) {
+  #player.at-bottom {
+    right: 24px;
+    left: auto;
+    transform: none;
+  }
+}
+
+#player.at-top {
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#player.at-left {
+  top: 50%;
+  left: 24px;
+  transform: translateY(-50%);
+}
+
+#player.at-right {
+  top: 50%;
+  right: 24px;
+  transform: translateY(-50%);
+}
+
+#player.at-center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Disappears without mouse movement, unless the player has its own pin. The menu pin does not count here. */
+body.idle #player:not(.pinned) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-pin {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 5px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 50%;
+  color: #fff;
+  background: rgb(20 16 40 / 70%);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: opacity 0.4s;
+}
+
+.player-pin:hover {
+  background: rgb(60 50 100 / 85%);
+}
+
+.player-pin[aria-pressed='true'] {
+  color: #05030f;
+  background: #4fd8ff;
+}
+
+.player-pin:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.player-pin svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* As with the menu: when pinned, the player stays; only the pin icon disappears. */
+body.idle .player-pin {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-cover {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: center / cover no-repeat;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
+}
+
+.player-cover.empty {
+  background-image: linear-gradient(135deg, #ff4fd8, #4fd8ff);
+}
+
+.player-main {
+  min-width: 0;
+}
+
+.player-title,
+.player-artist {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.player-title {
+  font-weight: 600;
+}
+
+.player-artist {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.player-artist[hidden],
+.player-message[hidden] {
+  display: none;
+}
+
+.player-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+#player.no-progress .player-progress-row {
+  display: none;
+}
+
+.player-progress {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  margin: 0;
+  accent-color: #fff;
+  cursor: pointer;
+}
+
+.player-message {
+  margin: 6px 0 0;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+#player.unavailable .player-text,
+#player.unavailable .player-progress-row {
+  display: none;
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.player-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 9px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: transparent;
+  cursor: pointer;
+}
+
+.player-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 15%);
+}
+
+.player-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.player-button:focus-visible,
+.player-progress:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.player-toggle {
+  width: 42px;
+  height: 42px;
+  padding: 12px;
+  color: #05030f;
+  background: rgb(255 255 255 / 90%);
+}
+
+.player-toggle:hover:not(:disabled) {
+  background: #fff;
+}
+
+.player-button svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.player-toggle .icon-pause,
+#player.playing .player-toggle .icon-play {
+  display: none;
+}
+
+#player.playing .player-toggle .icon-pause {
+  display: block;
+}
+
+/* Debug view at the top left (D key). Stays visible, even without mouse movement. */
+#debug {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+  width: 380px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 12px;
+  color: #e8f6ff;
+  font: 11px/1.45 ui-monospace, 'DejaVu Sans Mono', monospace;
+  background: rgb(5 3 15 / 78%);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+/* If the settings menu is open and visible, the debug view moves next to it on the right. In narrow windows as far
+   as possible. When the menu hides without a pin, it comes back. */
+body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
+  left: max(16px, min(392px, calc(100vw - 396px)));
+}
+
+#debug[hidden] {
+  display: none;
+}
+
+#debug h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+#debug h2 span {
+  font-weight: normal;
+  opacity: 0.55;
+}
+
+.debug-graph {
+  display: block;
+  width: 100%;
+  height: 70px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.debug-values {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 1px 12px;
+  margin: 0;
+}
+
+.debug-values dt {
+  opacity: 0.6;
+}
+
+.debug-values dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The slider is the only thing in the debug view that accepts clicks. */
+.debug-limit {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) 92px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  pointer-events: auto;
+}
+
+.debug-limit span {
+  opacity: 0.6;
+}
+
+.debug-limit input {
+  width: 100%;
+  margin: 0;
+  accent-color: #4fd8ff;
+}
+
+.debug-limit output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Preset editor (M key) and the second window for reference (N key): panels on the right like the preset browser,
+   only wider. side-panels.js places them side by side. */
+.preset-editor {
+  transition: right 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  bottom: 24px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(560px, calc(100vw - 48px));
+  padding: 12px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 13px;
+  background: rgb(10 7 26 / 90%);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+}
+
+.preset-editor[hidden] {
+  display: none;
+}
+
+/* Editors and preset browser slide in from the right. */
+.preset-editor:not([hidden]),
+#preset-browser:not([hidden]) {
+  animation: pe-slide-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes pe-slide-in {
+  from {
+    transform: translateX(calc(100% + 24px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preset-editor:not([hidden]),
+  #preset-browser:not([hidden]) {
+    animation: none;
+  }
+
+  #preset-browser,
+  .preset-editor {
+    transition: none;
+  }
+}
+
+.preset-editor header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pe-heading {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pe-title {
+  font-weight: 600;
+}
+
+.pe-state {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: rgb(255 255 255 / 12%);
+}
+
+.pe-state.edited {
+  color: #05030f;
+  background: #ffc84f;
+}
+
+.pe-save:disabled,
+.pe-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pe-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
+
+.pe-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.pe-tab {
+  position: relative;
+  padding: 6px 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: rgb(255 255 255 / 70%);
+  font: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+.pe-tab[aria-selected='true'] {
+  color: #fff;
+  border-bottom-color: #4fd8ff;
+}
+
+.pe-tab.has-error::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff4f6d;
+}
+
+.pe-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pe-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.pe-pane[hidden] {
+  display: none;
+}
+
+.pe-hint {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.pe-field,
+.pe-values,
+.pe-base,
+.pe-items-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.pe-field.compact {
+  flex: none;
+}
+
+.pe-field.compact .pe-code {
+  flex: none;
+  height: 52px;
+}
+
+.pe-field-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pe-items-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pe-items {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+}
+
+.pe-item {
+  position: relative;
+  padding: 4px 10px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 999px;
+  color: rgb(255 255 255 / 55%);
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  cursor: pointer;
+}
+
+.pe-item.on {
+  color: #fff;
+  border-color: rgb(127 227 196 / 60%);
+}
+
+.pe-item[aria-pressed='true'] {
+  background: rgb(79 216 255 / 22%);
+  border-color: #4fd8ff;
+}
+
+.pe-item.has-error::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff4f6d;
+}
+
+.pe-enabled {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pe-items-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pe-items-scroll .pe-values {
+  flex: none;
+}
+
+.pe-code {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 35%);
+  font: 12px/1.5 ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+.pe-gutter {
+  margin: 0;
+  padding: 8px 6px 56px 10px; /* bottom reserve as in .pe-highlight, so the line numbers scroll along */
+  overflow: hidden;
+  color: rgb(255 255 255 / 35%);
+  text-align: right;
+  font: inherit;
+  user-select: none;
+}
+
+.pe-gutter .error {
+  color: #ff4f6d;
+  font-weight: 700;
+}
+
+.pe-code-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.pe-highlight,
+.pe-textarea {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 8px 10px 8px 6px;
+  border: 0;
+  font: inherit;
+  white-space: pre;
+  tab-size: 2;
+  letter-spacing: normal;
+}
+
+.pe-highlight {
+  overflow: hidden;
+  /* Reserve at the bottom and right: the text field above can scroll a little further with its scrollbars.
+     Without the reserve this layer would stop at the end, and selection and cursor would be one line off. */
+  padding-right: 48px;
+  padding-bottom: 48px;
+  color: #e8f6ff;
+  pointer-events: none;
+}
+
+.pe-textarea {
+  outline: none;
+  resize: none;
+  color: transparent;
+  caret-color: #fff;
+  background: none;
+}
+
+.pe-textarea::selection {
+  color: transparent;
+  background: rgb(79 216 255 / 30%);
+}
+
+/* Colours only, no italics or bold: the text field above is set in regular. Other font styles have different
+   character widths depending on the font, and then selection and cursor no longer match the visible text. */
+.tk-comment {
+  color: #7d8aa8;
+}
+
+.tk-number {
+  color: #ffb86b;
+}
+
+.tk-function {
+  color: #4fd8ff;
+}
+
+.tk-variable {
+  color: #c3a6ff;
+}
+
+.tk-bridge {
+  color: #7fe3c4;
+}
+
+.tk-keyword {
+  color: #ff79b0;
+}
+
+.pe-code-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.pe-help {
+  flex: none;
+  font-size: 12px;
+}
+
+.pe-help summary {
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.pe-help[open] summary {
+  margin-bottom: 6px;
+}
+
+.pe-help .pe-filter {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pe-help-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 170px;
+  margin-top: 6px;
+  overflow-y: auto;
+}
+
+.pe-help-row {
+  display: grid;
+  grid-template-columns: 120px 70px 1fr;
+  gap: 8px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  background: none;
+  cursor: pointer;
+}
+
+.pe-help-row:hover {
+  background: rgb(255 255 255 / 10%);
+}
+
+.pe-help-row[hidden] {
+  display: none;
+}
+
+.pe-help-name {
+  color: #c3a6ff;
+  font: 12px ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+.pe-help-kind {
+  opacity: 0.5;
+}
+
+.pe-help-text {
+  opacity: 0.85;
+}
+
+.pe-filter,
+.pe-base-row input {
+  padding: 5px 8px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  background: rgb(0 0 0 / 30%);
+}
+
+.pe-base-list {
+  display: grid;
+  align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 4px 12px;
+  overflow: auto;
+}
+
+.pe-base-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 8px;
+  font: 12px ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+.pe-base-row[hidden] {
+  display: none;
+}
+
+.pe-base-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pe-base-key {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.6;
+}
+
+.pe-base-text {
+  overflow: hidden;
+  font: 11px system-ui, sans-serif;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.45;
+}
+
+.pe-base-row.changed .pe-base-key {
+  color: #ffc84f;
+  opacity: 1;
+}
+
+.pe-base-row input.invalid {
+  border-color: #ff4f6d;
+}
+
+.pe-status {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgb(79 216 255 / 12%);
+}
+
+.pe-status[data-kind='pending'] {
+  background: rgb(255 255 255 / 8%);
+}
+
+.pe-status[data-kind='error'] {
+  background: rgb(255 79 109 / 22%);
+}
+
+.pe-new-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.pe-new-menu[hidden] {
+  display: none;
+}
+
+.pe-new-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pe-new-name input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  background: rgb(0 0 0 / 30%);
+}
+
+.pe-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.pe-template {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  background: rgb(0 0 0 / 25%);
+  cursor: pointer;
+}
+
+.pe-template:hover {
+  border-color: #4fd8ff;
+}
+
+.pe-template-name {
+  font-weight: 600;
+}
+
+.pe-template-text {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.pe-state.fresh {
+  color: #05030f;
+  background: #7fe3c4;
+}
+
+.pe-group-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.pe-subtabs {
+  display: flex;
+  gap: 4px;
+}
+
+.pe-subtab {
+  color: rgb(255 255 255 / 75%);
+}
+
+.pe-subpane[hidden],
+.pe-group[hidden] {
+  display: none;
+}
+
+.pe-values-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pe-values-tools .pe-filter {
+  flex: 1;
+}
+
+.pe-only-changed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pe-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pe-base .pe-groups {
+  flex: 1;
+}
+
+.pe-items-scroll .pe-groups {
+  overflow: visible;
+}
+
+.pe-group summary {
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.pe-group .pe-base-list {
+  padding: 2px 0 6px 14px;
+}
+
+/* Yellow dot: changed compared with the original. Red (has-error) takes precedence. */
+.pe-tab.modified:not(.has-error)::after,
+.pe-item.modified:not(.has-error)::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffc84f;
+}
+
+.pe-item.modified:not(.has-error)::after {
+  top: -2px;
+  right: -2px;
+}
+
+/* Reference: search for a preset; "Running" shows the one currently playing. */
+.pe-pick-row {
+  display: flex;
+  gap: 6px;
+}
+
+.pe-pick {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  background: rgb(255 255 255 / 8%);
+}
+
+.pe-pick::placeholder {
+  color: rgb(255 255 255 / 85%);
+}
+
+#preset-reference .pe-title {
+  color: #9fd3ff;
+}
+
+#preset-reference textarea,
+#preset-reference .pe-base-row input {
+  cursor: text;
+}

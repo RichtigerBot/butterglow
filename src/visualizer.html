@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ButterGlow</title>
+    <link rel="stylesheet" href="visualizer.css" />
+  </head>
+  <body>
+    <main id="stage"></main>
+
+    <div id="hud">
+      <div id="hud-menu" hidden>
+        <label class="setting setting-select">
+          <span data-i18n="hud.visualizer">Visualizer</span>
+          <select id="hud-visualizer"></select>
+        </label>
+        <div id="hud-active-settings"></div>
+        <div id="hud-shared-settings"></div>
+      </div>
+      <div id="hud-header">
+        <div id="hud-title"></div>
+        <button id="hud-keys-toggle" class="hud-icon" type="button" aria-label="Key hints" data-i18n-aria-label="hud.keyHints" aria-pressed="true">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.500h12v7H2zM4.500 7h1M7.500 7h1M10.500 7h1M5 9.500h6" /></svg>
+        </button>
+        <button id="hud-menu-toggle" class="hud-icon" type="button" aria-label="Settings" title="Settings" data-i18n-aria-label="hud.settings" data-i18n-title="hud.settings" aria-expanded="false">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10l5-5 5 5" /></svg>
+        </button>
+        <button id="hud-pin" class="hud-icon" type="button" aria-label="Pin menu" data-i18n-aria-label="hud.pinMenu" aria-pressed="false">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.500 6zM8 9.500V14" /></svg>
+        </button>
+      </div>
+      <div id="hud-preset" hidden>
+        <button id="hud-prev" class="hud-icon hud-small" type="button" aria-label="Previous preset" title="Previous preset (←)" data-i18n-aria-label="hud.previousPreset" data-i18n-title="hud.previousPresetKey">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
+        </button>
+        <div id="hud-subtitle"></div>
+        <button id="hud-favorite" class="hud-icon hud-small hud-star" type="button" aria-label="Favourite" data-i18n-aria-label="hud.favorite" aria-pressed="false">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.2L8 11.5l-3.8 2 .7-4.2-3.1-3 4.3-.6z" /></svg>
+        </button>
+        <button id="hud-next" class="hud-icon hud-small" type="button" aria-label="Next preset" title="Next preset (→)" data-i18n-aria-label="hud.nextPreset" data-i18n-title="hud.nextPresetKey">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>
+        </button>
+        <button id="hud-browse" class="hud-icon hud-small" type="button" aria-label="Choose preset" title="Choose preset (B)" data-i18n-aria-label="hud.choosePreset" data-i18n-title="hud.choosePresetKey" aria-expanded="false">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h7" /></svg>
+        </button>
+      </div>
+      <div id="hud-beat">
+        <span id="light-kick">Kick</span>
+        <span id="light-snare">Snare</span>
+        <span id="light-hat" data-i18n="hud.hat">Hi-hat</span>
+        <span id="hud-bpm">– BPM</span>
+        <span id="hud-section" title="Song section: calm, build-up, drop or normal" data-i18n-title="hud.sectionTitle">–</span>
+      </div>
+      <div id="hud-keys" aria-label="Keys" data-i18n-aria-label="hud.keys">
+        <span><kbd>V</kbd><span data-i18n="keys.visualizer">Visualizer</span></span>
+        <span><kbd>← →</kbd><span data-i18n="keys.preset">Preset</span></span>
+        <span><kbd>B</kbd><span data-i18n="keys.browser">Browser</span></span>
+        <span><kbd>M</kbd><span data-i18n="keys.editor">Editor</span></span>
+        <span><kbd>N</kbd><span data-i18n="keys.reference">Reference</span></span>
+        <span><kbd data-i18n="keys.spaceKey">Space</kbd><span data-i18n="keys.play">Play</span></span>
+        <span><kbd>E</kbd><span data-i18n="keys.equalizer">Equalizer</span></span>
+        <span><kbd>F</kbd><span data-i18n="keys.fullscreen">Full screen</span></span>
+        <span><kbd>D</kbd><span data-i18n="keys.debug">Debug</span></span>
+        <span><kbd>Alt</kbd><span data-i18n="keys.hide">Hide</span></span>
+      </div>
+    </div>
+
+    <section id="debug" aria-label="Debug" hidden>
+      <h2>Debug <span data-i18n="debug.heading">D closes · explained in docs/debug.md</span></h2>
+      <label class="debug-limit">
+        <span data-i18n="debug.limit">Frame limit</span>
+        <input type="range" min="0" max="16" step="1" value="0" aria-label="Frame limit" data-i18n-aria-label="debug.limit" />
+        <output></output>
+      </label>
+      <canvas class="debug-graph" width="360" height="70" aria-label="Frame times of the last seconds" data-i18n-aria-label="debug.graph"></canvas>
+      <dl class="debug-values"></dl>
+    </section>
+
+    <section id="player" class="at-bottom" aria-label="Media player" data-i18n-aria-label="player.label" hidden>
+      <button class="player-pin" type="button" aria-label="Pin player" data-i18n-aria-label="player.pin" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.500 6zM8 9.500V14" /></svg>
+      </button>
+      <div class="player-cover empty" aria-hidden="true"></div>
+      <div class="player-main">
+        <div class="player-text">
+          <div class="player-title"></div>
+          <div class="player-artist"></div>
+        </div>
+        <div class="player-progress-row">
+          <span class="player-elapsed">0:00</span>
+          <input class="player-progress" type="range" min="0" max="1000" value="0" aria-label="Position in the track" data-i18n-aria-label="player.position" />
+          <span class="player-total">0:00</span>
+        </div>
+        <p class="player-message" hidden></p>
+      </div>
+      <div class="player-controls">
+        <button class="player-button" type="button" data-command="previous" aria-label="Previous" title="Previous" data-i18n-aria-label="player.previous" data-i18n-title="player.previous">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3v10M13 3L6 8l7 5z" /></svg>
+        </button>
+        <button class="player-button player-toggle" type="button" data-command="toggle" aria-label="Play">
+          <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l8 5-8 5z" /></svg>
+          <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10" /></svg>
+        </button>
+        <button class="player-button" type="button" data-command="next" aria-label="Next" title="Next" data-i18n-aria-label="player.next" data-i18n-title="player.next">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12 3v10M3 3l7 5-7 5z" /></svg>
+        </button>
+      </div>
+    </section>
+
+    <section id="preset-editor" class="preset-editor" aria-label="Preset editor" data-i18n-aria-label="editor.label" hidden>
+      <header>
+        <div class="pe-heading">
+          <span class="pe-title" data-i18n="editor.label">Preset editor</span>
+          <span class="pe-state"></span>
+        </div>
+        <button class="pe-compare pb-tool" type="button" title="Reference: a second panel with another preset, for reading and copying (key N)" aria-label="Reference" data-i18n-title="editor.compareTitle" data-i18n-aria-label="editor.compare">⧉</button>
+        <button class="pe-new pb-tool" type="button" title="New preset from a template" data-i18n-title="editor.newTitle" aria-expanded="false" data-i18n="editor.new">New</button>
+        <button class="pe-save pb-tool" type="button" data-i18n="editor.save">Save</button>
+        <button class="pe-reset pb-tool" type="button" title="Discard all changes" data-i18n-title="editor.resetTitle" disabled data-i18n="editor.reset">Reset</button>
+        <button class="pe-close pb-tool" type="button" aria-label="Close editor" data-i18n-aria-label="editor.close">×</button>
+      </header>
+      <form class="pe-new-menu" hidden>
+        <label class="pe-new-name">
+          <span data-i18n="editor.name">Name</span>
+          <input type="text" maxlength="80" placeholder="Author - Title, e.g. Me - My first preset" data-i18n-placeholder="editor.namePlaceholder" />
+        </label>
+        <div class="pe-templates" role="list" aria-label="Templates" data-i18n-aria-label="editor.templates"></div>
+      </form>
+      <div class="pe-name"></div>
+      <nav class="pe-tabs" role="tablist" aria-label="Parts of the preset" data-i18n-aria-label="editor.parts"></nav>
+      <div class="pe-body"></div>
+      <p class="pe-status" role="status" data-kind="ok"></p>
+    </section>
+
+    <section id="preset-browser" class="drawer" aria-label="Preset browser" data-i18n-aria-label="browser.label" hidden>
+      <header>
+        <select id="pb-collection" aria-label="Collection to play from" title="Only presets from this collection are played" data-i18n-aria-label="browser.collection" data-i18n-title="browser.collectionTitle"></select>
+        <button id="pb-create" class="pb-tool" type="button" title="New collection" aria-label="New collection" data-i18n-title="browser.create" data-i18n-aria-label="browser.create">+</button>
+        <button id="pb-rename" class="pb-tool" type="button" title="Rename collection" aria-label="Rename collection" data-i18n-title="browser.rename" data-i18n-aria-label="browser.rename" hidden>✎</button>
+        <button id="pb-delete" class="pb-tool" type="button" title="Delete collection" aria-label="Delete collection" data-i18n-title="browser.delete" data-i18n-aria-label="browser.delete" hidden>🗑</button>
+        <button id="pb-close" class="pb-tool" type="button" aria-label="Close browser" data-i18n-aria-label="browser.close">×</button>
+      </header>
+      <form id="pb-name-form" hidden>
+        <input type="text" maxlength="40" aria-label="Name of the collection" data-i18n-aria-label="browser.collectionName" />
+        <button type="submit">OK</button>
+        <button type="button" data-action="cancel" data-i18n="browser.cancel">Cancel</button>
+      </form>
+      <div id="pb-folder" hidden>
+        <span class="pb-folder-text"></span>
+        <button class="pb-folder-action pb-tool" type="button"></button>
+        <button class="pb-folder-open pb-tool" type="button" title="Load .milk files or a backup of favourites and collections" data-i18n-title="browser.openFilesTitle" data-i18n="browser.openFiles">Open files</button>
+        <button class="pb-backup pb-tool" type="button" title="Download favourites and collections as a file. Keep it next to your presets; “Open files” brings it back." data-i18n-title="browser.backupTitle" data-i18n="browser.backup">Back up</button>
+        <input class="pb-folder-files" type="file" accept=".milk,.json" multiple hidden />
+      </div>
+      <input id="pb-search" type="search" placeholder="Search by name or author" aria-label="Search presets" data-i18n-placeholder="browser.search" data-i18n-aria-label="browser.searchLabel" />
+      <p id="pb-note" hidden></p>
+      <ul id="pb-list"></ul>
+    </section>
+
+    <section id="equalizer" aria-label="Equalizer" hidden>
+      <header>
+        <h2>Equalizer</h2>
+        <label id="eq-toggle"><input id="eq-enabled" type="checkbox" /> <span data-i18n="eq.enabled">On</span></label>
+        <button id="eq-close" type="button" aria-label="Close equalizer" data-i18n-aria-label="eq.close">×</button>
+      </header>
+      <canvas id="eq-curve"></canvas>
+      <div id="eq-sliders"></div>
+      <label id="eq-bass" title="Makes the bass fuller without clipping: quiet bass is raised by up to +12 dB, loud bass is caught gently. Double-click resets to 0." data-i18n-title="eq.bassTitle">
+        <span data-i18n="eq.bass">Bass boost</span>
+        <input type="range" min="0" max="100" step="5" value="0" aria-label="Bass boost" data-i18n-aria-label="eq.bass" />
+        <output></output>
+      </label>
+      <div id="eq-presets"></div>
+    </section>
+
+    <button id="status" hidden></button>
+
+    <script type="module" src="visualizer.js"></script>
+  </body>
+</html>
