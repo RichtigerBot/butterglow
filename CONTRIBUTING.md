@@ -58,3 +58,10 @@ Please make sure all tests pass before opening a pull request, and add a test fo
 The bundled presets come from `butterchurn-presets` and were written by many authors of the MilkDrop community.
 If you contribute presets, keep the original author in the name of edited presets and only submit presets you are
 allowed to share.
+
+## Releases
+
+1. Raise `version` in both `src/manifest.json` and `package.json` (the packer refuses mismatching versions).
+2. Run `npm test`, then `npm run package`. The result is `release/butterglow-<version>.zip`.
+3. Commit, tag the commit as `v<version>` and push the tag.
+4. On GitHub, create a release from the tag and attach the zip file.

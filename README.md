@@ -24,7 +24,20 @@ under **Language**.
 
 ## Installation
 
-ButterGlow is not in the Chrome Web Store yet. To try it, build it and load it as an unpacked extension:
+ButterGlow is not in the Chrome Web Store yet. It is installed as an unpacked extension.
+
+### From a release
+
+1. Download `butterglow-<version>.zip` from the [latest release](https://github.com/RichtigerBot/butterglow/releases/latest)
+   and extract it into a folder you keep (Chrome loads the extension from there).
+2. Open `chrome://extensions` and switch on **Developer mode**.
+3. Click **Load unpacked** and choose the extracted folder.
+4. Play music in any tab and click the ButterGlow icon in the toolbar.
+
+To update, extract the new release into the same folder and click the reload button on ButterGlow's card in
+`chrome://extensions`. Settings, favourites and collections are kept as long as the folder stays the same.
+
+### From source
 
 ```bash
 git clone https://github.com/RichtigerBot/butterglow.git
@@ -33,9 +46,8 @@ npm install
 npm run build
 ```
 
-1. Open `chrome://extensions` and switch on **Developer mode**.
-2. Click **Load unpacked** and choose the `dist/` folder.
-3. Play music in any tab and click the ButterGlow icon in the toolbar.
+Then load the `dist/` folder as described above. `npm run package` additionally packs it into
+`release/butterglow-<version>.zip`.
 
 Requires Chrome 124 or newer. Other Chromium browsers work too; in Brave, custom presets are stored inside the
 extension because Brave does not allow extensions to access folders.

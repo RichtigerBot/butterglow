@@ -1,6 +1,7 @@
 # Dependencies and build output (recreated by npm install / npm run build)
 node_modules/
 dist/
+release/
 
 # Test output
 test-output/
