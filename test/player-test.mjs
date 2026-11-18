@@ -197,6 +197,29 @@ try {
   const pinIcon = await page.$eval('.player-pin', (pin) => getComputedStyle(pin).opacity);
   check('The player pin icon still disappears', pinIcon === '0');
 
+  // Copy protection (Spotify Web and others): the tab plays, but only silence arrives. Volume 0 produces exactly that.
+  await music.evaluate(async () => {
+    audio.loop = true;
+    audio.currentTime = 1;
+    audio.volume = 0;
+    await audio.play();
+  });
+  const statusShown = () =>
+    page.evaluate(() => {
+      const status = document.getElementById('status');
+      return { hidden: status.hidden, text: status.textContent };
+    });
+  await page.waitForFunction(() => !document.getElementById('status').hidden, { timeout: 15000 }).catch(() => {});
+  const silentHint = await statusShown();
+  await music.evaluate(() => (audio.volume = 1));
+  await page.waitForFunction(() => document.getElementById('status').hidden, { timeout: 5000 }).catch(() => {});
+  const afterSound = await statusShown();
+  check(
+    'A playing tab that delivers only silence gets a hint, which goes away with sound',
+    !silentHint.hidden && silentHint.text.includes('only silence') && afterSound.hidden,
+    JSON.stringify({ silentHint, afterSound }),
+  );
+
   // The stream ID is only valid once, so a new window in demo mode checks whether the pin was saved.
   const demo = await browser.newPage();
   await demo.goto(`chrome-extension://${extensionId}/visualizer.html?demo=1`, { timeout: 15000 });

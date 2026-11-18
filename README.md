@@ -53,6 +53,12 @@ Then load the `dist/` folder as described above. `npm run package` additionally 
 Requires Chrome 124 or newer. Other Chromium browsers work too; in Brave, custom presets are stored inside the
 extension because Brave does not allow extensions to access folders.
 
+### Services that stay silent
+
+ButterGlow records the sound of the tab. Services with copy protection, such as Spotify Web or Netflix, can hand
+over only silence: the visualizer then does not react, whatever the volume. ButterGlow notices this and shows a hint.
+YouTube, SoundCloud and other unprotected sites work.
+
 ## Keyboard shortcuts
 
 | Key | Action |

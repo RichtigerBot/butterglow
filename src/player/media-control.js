@@ -89,5 +89,6 @@ export function mediaControl(command, value) {
     canNext: Boolean(findButton('next')),
     canPrevious: Boolean(findButton('previous')),
     canSeek: duration > 0,
+    site: location.hostname, // for the hint about copy-protected services
   };
 }

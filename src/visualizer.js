@@ -1,5 +1,6 @@
 import { AudioEngine, audioSettings } from './audio/engine.js';
 import { startDemoSource } from './audio/demo-source.js';
+import { createSilenceWatch } from './audio/silence-watch.js';
 import { createWater, waterSettings } from './effects/water.js';
 import { createDemoController, createPlayer, createTabController, playerSettings } from './player/player.js';
 import { createDebugPanel } from './ui/debug-panel.js';
@@ -318,6 +319,26 @@ function ensureAudioRunning() {
   });
 }
 
+// Copy-protected services (Spotify Web, Netflix, …) deliver silence to the capture. If the tab plays and nothing
+// arrives, say so instead of leaving the user in front of 0 %. The hint goes away by itself when sound arrives.
+function watchForSilence(controller) {
+  let hint = null;
+  const watch = createSilenceWatch({
+    readPeak: () => engine.inputPeak(),
+    readTab: () => controller.send('state'),
+    onSilent: (service) => {
+      hint = () => (service ? t('status.protectedService', { service }) : t('status.silentTab'));
+      showStatus(hint, { onClick: () => (status.hidden = true) });
+    },
+    onSound: () => {
+      if (statusMessage === hint) status.hidden = true;
+    },
+  });
+  setInterval(() => {
+    if (engine.context.state === 'running') watch.check(performance.now() / 1000);
+  }, 1000);
+}
+
 // Language switch at runtime: static texts, the status line and the overlay. The panels listen themselves.
 onLanguageChange(() => {
   translateDom();
@@ -440,11 +461,13 @@ async function start() {
 
   // The player controls the captured tab, in demo mode the demo beat.
   const tabId = Number(params.get('tab'));
+  const controller = params.has('streamId') && tabId ? createTabController(tabId) : createDemoController(engine.context);
   player = createPlayer({
     root: document.getElementById('player'),
-    controller: params.has('streamId') && tabId ? createTabController(tabId) : createDemoController(engine.context),
+    controller,
     settings: settingsPanel.settingsFor('player', playerSettings),
   });
+  if (params.has('streamId')) watchForSilence(controller);
 
   // The water is a bonus: if WebGL 2 is missing, the rest keeps running without it.
   try {

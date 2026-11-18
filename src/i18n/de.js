@@ -47,6 +47,8 @@ export default {
     visualizerFailed: '{name} konnte nicht starten: {error}',
     clickToStart: 'Klicken, um den Ton zu starten',
     startFailed: 'ButterGlow konnte nicht starten: {error}',
+    protectedService: '{service} spielt, aber hier kommt nur Stille an: {service} schützt seinen Ton vor Aufnahmen. Musik von YouTube oder SoundCloud funktioniert. Klicken zum Schließen.',
+    silentTab: 'Der Tab spielt, aber hier kommt nur Stille an. Die Seite schützt ihren Ton vermutlich vor Aufnahmen. Klicken zum Schließen.',
     cannotCapture: 'Dieser Tab lässt sich nicht aufnehmen: {error}',
     streamEnded: 'Die Aufnahme ist beendet, weil der Tab geschlossen wurde.',
     startFromIcon: 'Bitte über das Extension-Icon in einem Tab mit Musik starten.',
