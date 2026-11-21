@@ -55,9 +55,11 @@ extension because Brave does not allow extensions to access folders.
 
 ### Services that stay silent
 
-ButterGlow records the sound of the tab. Services with copy protection, such as Spotify Web or Netflix, can hand
-over only silence: the visualizer then does not react, whatever the volume. ButterGlow notices this and shows a hint.
-YouTube, SoundCloud and other unprotected sites work.
+ButterGlow records the sound of the tab, not of apps. If a page only remote-controls playback elsewhere – Spotify
+Web playing through the Spotify app or another device via Spotify Connect, for example – the tab itself is silent and
+the visualizer does not react, whatever the volume. Switch playback to the browser (in Spotify: **This web
+browser** under devices). Copy protection can also hand the recording only silence. ButterGlow notices a playing but
+silent tab and shows a hint.
 
 ## Keyboard shortcuts
 

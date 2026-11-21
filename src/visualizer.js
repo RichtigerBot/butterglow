@@ -319,15 +319,15 @@ function ensureAudioRunning() {
   });
 }
 
-// Copy-protected services (Spotify Web, Netflix, …) deliver silence to the capture. If the tab plays and nothing
-// arrives, say so instead of leaving the user in front of 0 %. The hint goes away by itself when sound arrives.
+// The tab reports playback, but only silence arrives: usually the music plays in an app or on another device
+// (Spotify Connect), sometimes copy protection. Say so instead of leaving the user in front of 0 %. The hint goes away by itself when sound arrives.
 function watchForSilence(controller) {
   let hint = null;
   const watch = createSilenceWatch({
     readPeak: () => engine.inputPeak(),
     readTab: () => controller.send('state'),
     onSilent: (service) => {
-      hint = () => (service ? t('status.protectedService', { service }) : t('status.silentTab'));
+      hint = () => (service ? t('status.silentService', { service }) : t('status.silentTab'));
       showStatus(hint, { onClick: () => (status.hidden = true) });
     },
     onSound: () => {

@@ -303,7 +303,7 @@ export class AudioEngine {
   }
 
   // Returns the current audio data for each frame; levels are between 0 and 1.
-  // Peak of the undelayed input (0 to 1). Copy-protected tabs deliver exact zeros here.
+  // Peak of the undelayed input (0 to 1). A silent tab delivers exact zeros here.
   inputPeak() {
     this.inputSamples ??= new Float32Array(this.sectionAnalyser.fftSize);
     this.sectionAnalyser.getFloatTimeDomainData(this.inputSamples);

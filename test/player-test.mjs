@@ -197,7 +197,7 @@ try {
   const pinIcon = await page.$eval('.player-pin', (pin) => getComputedStyle(pin).opacity);
   check('The player pin icon still disappears', pinIcon === '0');
 
-  // Copy protection (Spotify Web and others): the tab plays, but only silence arrives. Volume 0 produces exactly that.
+  // The tab reports playback, but only silence arrives (music in an app, copy protection). Volume 0 produces exactly that.
   await music.evaluate(async () => {
     audio.loop = true;
     audio.currentTime = 1;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSilenceWatch, protectedServiceName, SILENCE_PEAK, SILENCE_SECONDS } from '../src/audio/silence-watch.js';
+import { createSilenceWatch, serviceName, SILENCE_PEAK, SILENCE_SECONDS } from '../src/audio/silence-watch.js';
 
 function setup({ playing = true, site = 'open.spotify.com' } = {}) {
   const calls = { silent: [], sound: 0, asked: 0 };
@@ -18,12 +18,12 @@ function setup({ playing = true, site = 'open.spotify.com' } = {}) {
 }
 
 test('Known services are named by host, including subdomains', () => {
-  assert.equal(protectedServiceName('open.spotify.com'), 'Spotify');
-  assert.equal(protectedServiceName('www.netflix.com'), 'Netflix');
-  assert.equal(protectedServiceName('listen.tidal.com'), 'Tidal');
-  assert.equal(protectedServiceName('www.youtube.com'), null);
-  assert.equal(protectedServiceName('notspotify.com'), null);
-  assert.equal(protectedServiceName(undefined), null);
+  assert.equal(serviceName('open.spotify.com'), 'Spotify');
+  assert.equal(serviceName('www.netflix.com'), 'Netflix');
+  assert.equal(serviceName('listen.tidal.com'), 'Tidal');
+  assert.equal(serviceName('www.youtube.com'), null);
+  assert.equal(serviceName('notspotify.com'), null);
+  assert.equal(serviceName(undefined), null);
 });
 
 test('Silence while the tab plays leads to one hint, only after the waiting time', async () => {

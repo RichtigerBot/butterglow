@@ -89,6 +89,6 @@ export function mediaControl(command, value) {
     canNext: Boolean(findButton('next')),
     canPrevious: Boolean(findButton('previous')),
     canSeek: duration > 0,
-    site: location.hostname, // for the hint about copy-protected services
+    site: location.hostname, // to name the service in the hint about a silent tab
   };
 }

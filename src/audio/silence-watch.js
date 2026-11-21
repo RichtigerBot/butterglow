@@ -1,15 +1,17 @@
-// Notices when the captured tab plays but only silence arrives. Services with copy protection (Spotify Web,
-// Netflix and others) do that: the capture runs, but Chrome hands over silence instead of their sound.
-// Without a hint this looks like a broken extension, so the visualizer explains it.
+// Notices when the captured tab plays but only silence arrives. The most common cause: the page only
+// remote-controls playback in an app or on another device (Spotify Web with Spotify Connect, for example), so the
+// tab itself is silent. Copy protection can also hand the capture silence. Without a hint this looks like a broken
+// extension, so the visualizer explains it.
 
-// Below this peak level the input counts as silence. Protected sound arrives as exact zeros; real music,
+// Below this peak level the input counts as silence. A silent tab delivers exact zeros; real music,
 // even a quiet passage, stays clearly above it.
 export const SILENCE_PEAK = 1e-4;
 // How long it has to stay silent while the tab plays. Long enough for pauses between songs and fade-ins.
 export const SILENCE_SECONDS = 8;
 
-// Services known to protect their sound. The name is shown in the hint; matched on the end of the host name.
-const PROTECTED_SERVICES = [
+// Streaming services, named in the hint: they can play in their app or on another device, and they use copy
+// protection. Matched on the end of the host name.
+const KNOWN_SERVICES = [
   ['spotify.com', 'Spotify'],
   ['netflix.com', 'Netflix'],
   ['disneyplus.com', 'Disney+'],
@@ -21,9 +23,9 @@ const PROTECTED_SERVICES = [
   ['deezer.com', 'Deezer'],
 ];
 
-export function protectedServiceName(host) {
+export function serviceName(host) {
   const name = String(host ?? '').toLowerCase();
-  const match = PROTECTED_SERVICES.find(([domain]) => name === domain || name.endsWith(`.${domain}`));
+  const match = KNOWN_SERVICES.find(([domain]) => name === domain || name.endsWith(`.${domain}`));
   return match ? match[1] : null;
 }
 
@@ -54,7 +56,7 @@ export function createSilenceWatch({ readPeak, readTab, onSilent, onSound, secon
         const tab = await readTab();
         if (tab?.playing === true) {
           reported = true;
-          onSilent(protectedServiceName(tab.site));
+          onSilent(serviceName(tab.site));
         }
       } finally {
         asking = false;
