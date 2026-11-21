@@ -5,6 +5,8 @@
 // cue. It says which preset comes (a fixed one, or a random one from all presets or a collection) and how
 // (hard cut, or soft cross-fade, which suits quiet parts). All functions here are pure: they return new objects.
 
+import { normalizeMarkers } from './song-markers.js';
+
 export const FILE_KIND = 'butterglow-visconfs';
 export const FILE_VERSION = 1;
 export const FILE_NAME = 'butterglow-visconfs.json';
@@ -129,23 +131,23 @@ export function snapToBeat(time, beats, maxDistance = SNAP_SECONDS) {
   return best ?? time;
 }
 
-// A first draft from a song analysis: a hard cut on every drop, a soft change at every quiet part,
-// each with a random preset from `pool`.
-export function cuesFromAnalysis(analysis, { pool = ALL_PRESETS } = {}) {
+// A first draft from the song markers (song-markers.js, possibly edited by hand): a hard cut on every drop,
+// a soft change at the start of every quiet part, each with a random preset from `pool`.
+export function cuesFromMarkers(markers, { pool = ALL_PRESETS } = {}) {
   const preset = { mode: 'random', pool };
   return sortCues([
-    ...(analysis?.drops ?? []).map(({ time }) => normalizeCue({ time, preset, transition: 'cut', origin: 'drop' })),
-    ...(analysis?.quietStarts ?? []).map((time) => normalizeCue({ time, preset, transition: 'soft', origin: 'quiet' })),
+    ...(markers?.drops ?? []).map(({ time }) => normalizeCue({ time, preset, transition: 'cut', origin: 'drop' })),
+    ...(markers?.quiet ?? []).map(({ start }) => normalizeCue({ time: start, preset, transition: 'soft', origin: 'quiet' })),
   ]);
 }
 
-// Export file: the visconfs and, if given, the song analyses (keyed by songKey), so the waveform is there on
-// another computer too.
-export function toFile(visconfs, analyses = {}) {
-  return JSON.stringify({ kind: FILE_KIND, version: FILE_VERSION, visconfs: visconfs.map(normalizeVisconf).filter(Boolean), analyses }, null, 1);
+// Export file: the visconfs and, if given, the song analyses and markers (both keyed by songKey), so waveform and
+// hand-edited markers are there on another computer too.
+export function toFile(visconfs, analyses = {}, markers = {}) {
+  return JSON.stringify({ kind: FILE_KIND, version: FILE_VERSION, visconfs: visconfs.map(normalizeVisconf).filter(Boolean), analyses, markers }, null, 1);
 }
 
-// Returns { visconfs, analyses }. Throws if the text is not a visconf file; skips single broken entries.
+// Returns { visconfs, analyses, markers }. Throws if the text is not a visconf file; skips single broken entries.
 export function fromFile(textContent) {
   let data;
   try {
@@ -159,5 +161,10 @@ export function fromFile(textContent) {
   for (const [key, analysis] of Object.entries(data.analyses ?? {})) {
     if (analysis && Array.isArray(analysis.waveform?.peaks) && Number.isFinite(analysis.duration)) analyses[key] = analysis;
   }
-  return { visconfs: data.visconfs.map(normalizeVisconf).filter(Boolean), analyses };
+  const markers = {};
+  for (const [key, entry] of Object.entries(data.markers ?? {})) {
+    const clean = normalizeMarkers(entry);
+    if (clean) markers[key] = clean;
+  }
+  return { visconfs: data.visconfs.map(normalizeVisconf).filter(Boolean), analyses, markers };
 }

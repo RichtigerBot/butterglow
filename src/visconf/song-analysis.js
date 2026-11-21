@@ -1,4 +1,5 @@
-// Analyses a whole song for a visconf: waveform overview, drops, starts of quiet parts, beats and tempo.
+// Analyses a whole song for a visconf: waveform overview, drops, quiet parts, beats and tempo.
+// The result is the automatic starting point; song-markers.js makes it editable by hand.
 // Two ways lead to the same result:
 // - `analyzeSong()` with the samples of a loaded file. Runs the live detectors faster than real time over the
 //   whole song, so the drops are the same ones the visualizer would detect while playing.
@@ -43,19 +44,27 @@ function mostCommonBpm(values) {
   return best;
 }
 
-// Quiet parts that last at least QUIET_MIN_SECONDS and do not start the song.
-function quietStartsOf(timeline) {
-  const starts = [];
+// Quiet parts that last at least QUIET_MIN_SECONDS and do not start the song, as { start, end }.
+// One still running at the end of the song ends there.
+function quietPartsOf(timeline, duration) {
+  const parts = [];
   let start = null;
-  timeline.forEach(({ time, section }, index) => {
-    if (section === 'quiet') {
-      if (start === null && index > 0) start = time;
-      return;
-    }
-    if (start !== null && time - start >= QUIET_MIN_SECONDS) starts.push(start);
+  const close = (end) => {
+    if (start !== null && end - start >= QUIET_MIN_SECONDS) parts.push({ start: ROUND(start), end: ROUND(end) });
     start = null;
+  };
+  timeline.forEach(({ time, section }, index) => {
+    if (section !== 'quiet') return close(time);
+    if (start === null && index > 0) start = time;
   });
-  return starts;
+  close(duration);
+  return parts;
+}
+
+// `quietParts` with start and end; `quietStarts` only the starts, kept for simple uses.
+function quietOf(timeline, duration) {
+  const quietParts = quietPartsOf(timeline, duration);
+  return { quietParts, quietStarts: quietParts.map(({ start }) => start) };
 }
 
 // `samples`: mono, -1 to 1. `onProgress(fraction)` is called now and then; `signal` (AbortSignal) cancels.
@@ -93,7 +102,7 @@ export async function analyzeSong(samples, sampleRate, { onProgress, signal, fps
     duration: ROUND(duration),
     waveform: { perSecond: WAVEFORM_PER_SECOND, peaks: waveformPeaks(samples, sampleRate) },
     drops,
-    quietStarts: quietStartsOf(timeline).map(ROUND),
+    ...quietOf(timeline, duration),
     beats: kicks,
     bpm: mostCommonBpm(tempo),
   };
@@ -130,7 +139,7 @@ export function createSongRecorder() {
         duration: ROUND(duration),
         waveform: { perSecond: WAVEFORM_PER_SECOND, peaks: Array.from({ length }, (_, i) => peaks[i] ?? 0) },
         drops: [...drops.values()].filter(({ time }) => time <= duration).sort((a, b) => a.time - b.time),
-        quietStarts: quietStartsOf(sorted).map(ROUND),
+        ...quietOf(sorted, duration),
         beats: [...kicks].filter((time) => time <= duration).sort((a, b) => a - b),
         bpm: mostCommonBpm(tempo),
       };

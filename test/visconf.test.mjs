@@ -7,7 +7,7 @@ import {
   addCue,
   createVisconf,
   cueAt,
-  cuesFromAnalysis,
+  cuesFromMarkers,
   fromFile,
   normalizeTitle,
   removeCue,
@@ -16,6 +16,23 @@ import {
   toFile,
   updateCue,
 } from '../src/visconf/visconf-model.js';
+import {
+  addDrop,
+  addQuiet,
+  beatsOf,
+  createTapTempo,
+  gridFromBeats,
+  markersFromAnalysis,
+  moveDrop,
+  normalizeMarkers,
+  refreshMarkers,
+  removeDrop,
+  removeQuiet,
+  setDownbeat,
+  setTempo,
+  shiftGrid,
+  updateQuiet,
+} from '../src/visconf/song-markers.js';
 import { createVisconfStore } from '../src/visconf/visconf-store.js';
 
 const SONG = { title: 'Test Song (Official Video)', artist: 'Test Band', duration: 120 };
@@ -64,7 +81,9 @@ test('Analysing a song finds the drop, the beats and the tempo', async () => {
   assert.ok(Math.abs(analysis.drops[0].time - 20) < 0.2, `drop at ${analysis.drops[0].time}`);
   assert.ok(analysis.beats.filter((time) => time > 20.5).length > 30, 'kicks after the drop');
   assert.equal(analysis.bpm, 120);
-  assert.ok(analysis.quietStarts.some((time) => time > 10 && time < 13), `breakdown at ${analysis.quietStarts}`);
+  const breakdown = analysis.quietParts.find(({ start }) => start > 10 && start < 13);
+  assert.ok(breakdown && breakdown.end > 19 && breakdown.end < 21, `breakdown ${JSON.stringify(analysis.quietParts)}`);
+  assert.deepEqual(analysis.quietStarts, analysis.quietParts.map(({ start }) => start));
   assert.equal(progress.at(-1), 1);
 });
 
@@ -125,8 +144,9 @@ test('Hand-set times snap to a close beat', () => {
   assert.equal(snapToBeat(0.9, []), 0.9);
 });
 
-test('A draft from the analysis: cut on drops, soft at quiet parts', () => {
-  const cues = cuesFromAnalysis({ drops: [{ time: 60, strength: 1 }], quietStarts: [30] }, { pool: 'favorites' });
+test('A draft from the markers: cut on drops, soft at quiet parts', () => {
+  const markers = markersFromAnalysis({ duration: 120, drops: [{ time: 60, strength: 1 }], quietParts: [{ start: 30, end: 40 }] });
+  const cues = cuesFromMarkers(markers, { pool: 'favorites' });
   assert.deepEqual(
     cues.map(({ time, transition, origin, preset }) => [time, transition, origin, preset.pool]),
     [
@@ -136,12 +156,110 @@ test('A draft from the analysis: cut on drops, soft at quiet parts', () => {
   );
 });
 
+const ANALYSIS = {
+  duration: 120,
+  drops: [{ time: 30, strength: 0.8 }, { time: 90, strength: 1 }],
+  quietParts: [{ start: 60, end: 75 }],
+  beats: [0.25, 0.75, 1.25, 1.75, 2.26, 2.74],
+  bpm: 120,
+};
+
+test('Markers start from the analysis with a beat grid that fits the kicks', () => {
+  const markers = markersFromAnalysis(ANALYSIS);
+  assert.deepEqual(markers.drops.map(({ time, manual }) => [time, manual]), [[30, false], [90, false]]);
+  assert.deepEqual(markers.quiet.map(({ start, end }) => [start, end]), [[60, 75]]);
+  assert.equal(markers.grid.bpm, 120);
+  assert.ok(Math.abs(markers.grid.offset - 0.25) < 0.01, `offset ${markers.grid.offset}`);
+  assert.deepEqual(beatsOf(markers.grid, 2).map((time) => Math.round(time * 100) / 100), [0.25, 0.75, 1.25, 1.75]);
+  const old = markersFromAnalysis({ duration: 60, drops: [{ time: 40 }], quietStarts: [10, 35] });
+  assert.deepEqual(old.quiet.map(({ start, end }) => [start, end]), [[10, 18], [35, 40]], 'older analyses with only starts');
+});
+
+test('Drops can be added, dragged and deleted by hand', () => {
+  let markers = markersFromAnalysis(ANALYSIS);
+  const [first] = markers.drops;
+  markers = moveDrop(markers, first.id, 100);
+  assert.deepEqual(markers.drops.map(({ time, manual }) => [time, manual]), [[90, false], [100, true]]);
+  markers = moveDrop(markers, first.id, 500);
+  assert.equal(markers.drops[1].time, 120, 'not past the end of the song');
+  markers = addDrop(markers, 10);
+  assert.equal(markers.drops[0].time, 10);
+  assert.ok(markers.drops[0].manual);
+  markers = removeDrop(markers, markers.drops.find(({ time }) => time === 90).id);
+  assert.deepEqual(markers.hidden, [90], 'deleted automatic drop is remembered');
+  assert.equal(markers.drops.length, 2);
+});
+
+test('Quiet parts can be added, resized, moved and deleted', () => {
+  let markers = markersFromAnalysis(ANALYSIS);
+  const [part] = markers.quiet;
+  markers = updateQuiet(markers, part.id, { end: 80 });
+  assert.deepEqual([markers.quiet[0].start, markers.quiet[0].end, markers.quiet[0].manual], [60, 80, true]);
+  markers = updateQuiet(markers, part.id, { start: 85 });
+  assert.equal(markers.quiet[0].end, 85.5, 'start past the end pushes the end, the range stays at least 0.5 s');
+  markers = updateQuiet(markers, part.id, { start: 50, end: 55 });
+  assert.deepEqual([markers.quiet[0].start, markers.quiet[0].end], [50, 55], 'moved as a whole');
+  markers = addQuiet(markers, 100, 200);
+  assert.deepEqual([markers.quiet[1].start, markers.quiet[1].end], [100, 120]);
+  markers = removeQuiet(markers, markers.quiet[1].id);
+  assert.deepEqual(markers.hidden, [], 'deleting a hand-made part leaves nothing to hide');
+  assert.equal(markers.quiet.length, 1);
+});
+
+test('The beat grid can be set by number, moved and placed on a kick', () => {
+  let markers = markersFromAnalysis(ANALYSIS);
+  markers = setTempo(markers, 128, 2.25);
+  assert.equal(markers.grid.bpm, 128);
+  assert.ok(beatsOf(markers.grid, 3).some((time) => Math.abs(time - 2.25) < 0.01), 'the beat at the anchor stays');
+  assert.ok(markers.grid.manual);
+  assert.equal(setTempo(markers, 1000).grid.bpm, 240, 'clamped');
+  markers = shiftGrid(markers, 2.25, 2.3);
+  assert.ok(beatsOf(markers.grid, 3).some((time) => Math.abs(time - 2.3) < 0.01));
+  markers = setDownbeat(markers, 1.0);
+  assert.ok(beatsOf(markers.grid, 3).some((time) => Math.abs(time - 1.0) < 0.001));
+  assert.equal(gridFromBeats([], null).bpm, null);
+  assert.equal(shiftGrid(markersFromAnalysis({ duration: 10 }), 0, 1).grid.offset, 0, 'no grid without tempo');
+});
+
+test('Tap tempo finds the tempo after four taps and starts again after a pause', () => {
+  const tapper = createTapTempo();
+  assert.equal(tapper.tap(10), null);
+  tapper.tap(10.5);
+  tapper.tap(11.01);
+  assert.ok(Math.abs(tapper.tap(11.5) - 120) < 0.5, 'a slightly early or late tap barely matters');
+  assert.equal(tapper.last, 11.5);
+  assert.equal(tapper.tap(20), null, 'pause: new measurement');
+});
+
+test('A new analysis keeps hand-made changes and deleted markers stay deleted', () => {
+  let markers = markersFromAnalysis(ANALYSIS);
+  markers = removeDrop(markers, markers.drops[0].id); // automatic drop at 30
+  markers = moveDrop(markers, markers.drops[0].id, 95); // automatic 90 moved by hand to 95
+  markers = setTempo(markers, 126);
+  const fresh = refreshMarkers(markers, { ...ANALYSIS, drops: [{ time: 30.2 }, { time: 95.1 }, { time: 110 }], bpm: 124 });
+  assert.deepEqual(fresh.drops.map(({ time, manual }) => [time, manual]), [[95, true], [110, false]]);
+  assert.equal(fresh.grid.bpm, 126, 'hand-set tempo stays');
+  assert.equal(refreshMarkers(markersFromAnalysis(ANALYSIS), { ...ANALYSIS, bpm: 124 }).grid.bpm, 124, 'automatic tempo follows');
+});
+
+test('Broken markers from storage or a file are cleaned up', () => {
+  assert.equal(normalizeMarkers(null), null);
+  assert.equal(normalizeMarkers({ drops: [] }), null);
+  const clean = normalizeMarkers({ duration: 60, drops: [{ time: 'x' }, { time: 5 }], quiet: [{ start: 1 }], grid: { bpm: 999 }, hidden: ['a', 3] });
+  assert.equal(clean.drops.length, 1);
+  assert.equal(clean.quiet.length, 0);
+  assert.equal(clean.grid.bpm, null);
+  assert.deepEqual(clean.hidden, [3]);
+});
+
 test('Export and import keep visconfs and analyses, and reject other files', () => {
   const visconf = createVisconf({ name: 'Set', song: SONG, cues: [{ time: 12, label: 'Drop' }] });
   const analyses = { key: { duration: 120, waveform: { perSecond: 20, peaks: [1, 2] } }, broken: { duration: 'x' } };
-  const { visconfs, analyses: restored } = fromFile(toFile([visconf, { song: {} }], analyses));
+  const markers = { key: addDrop(markersFromAnalysis(ANALYSIS), 5), broken: { duration: 'x' } };
+  const { visconfs, analyses: restored, markers: restoredMarkers } = fromFile(toFile([visconf, { song: {} }], analyses, markers));
   assert.deepEqual(visconfs, [visconf]);
   assert.deepEqual(Object.keys(restored), ['key']);
+  assert.deepEqual(restoredMarkers, { key: markers.key });
   assert.throws(() => fromFile('{'), /not-json/);
   assert.throws(() => fromFile('{"kind":"butterglow-collections"}'), /not-visconfs/);
   assert.throws(() => fromFile('{"kind":"butterglow-visconfs","version":99,"visconfs":[]}'), /too-new/);
@@ -208,4 +326,21 @@ test('The store keeps visconfs per song and merges imports', async () => {
   assert.equal((await store.forSong(SONG))[0].name, 'Imported');
   await store.remove(first.id);
   assert.equal((await store.all()).length, 1);
+});
+
+test('The store keeps hand-made markers across a new analysis and can reset them', async () => {
+  const data = {};
+  const area = { get: async (key) => ({ [key]: structuredClone(data[key]) }), set: async (values) => Object.assign(data, structuredClone(values)) };
+  const store = createVisconfStore(area);
+  assert.equal(await store.markersFor(SONG), null);
+  await store.saveAnalysis(SONG, ANALYSIS);
+  let markers = await store.markersFor(SONG);
+  assert.equal(markers.drops.length, 2);
+  markers = addDrop(markers, 12);
+  await store.saveMarkers(SONG, markers);
+  await store.saveAnalysis(SONG, { ...ANALYSIS, drops: [{ time: 30 }] });
+  assert.deepEqual((await store.markersFor(SONG)).drops.map(({ time }) => time), [12, 30]);
+  assert.deepEqual((await store.resetMarkers(SONG)).drops.map(({ time }) => time), [30]);
+  await store.merge({ markers: { [Object.keys(await store.markers())[0]]: addDrop(markersFromAnalysis(ANALYSIS), 1) } });
+  assert.equal((await store.markersFor(SONG)).drops[0].time, 1, 'imported markers replace');
 });
