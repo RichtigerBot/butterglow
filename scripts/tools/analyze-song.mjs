@@ -1,9 +1,10 @@
 // Runs audio files through the beat detector without a browser and faster than real time.
-// Reproduces what an AnalyserNode returns (Blackman window, decibels, bytes) and needs ffmpeg.
+// Reproduces what an AnalyserNode returns (src/audio/analyser-spectrum.js) and needs ffmpeg.
 // Usage: node scripts/tools/analyze-song.mjs [--json folder] file.mp3 ...
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { createAnalyserSpectrum } from '../../src/audio/analyser-spectrum.js';
 import { BeatDetector } from '../../src/audio/beat-detector.js';
 
 const SAMPLE_RATE = 48000;
@@ -21,52 +22,7 @@ export function decode(file) {
   return new Float32Array(buffer.slice(byteOffset, byteOffset + byteLength));
 }
 
-const window = Float32Array.from({ length: FFT_SIZE }, (_, i) => {
-  const x = (2 * Math.PI * i) / FFT_SIZE;
-  return 0.42 - 0.5 * Math.cos(x) + 0.08 * Math.cos(2 * x);
-});
-
-const reversed = Uint16Array.from({ length: FFT_SIZE }, (_, i) => {
-  let result = 0;
-  for (let bit = 0; bit < Math.log2(FFT_SIZE); bit++) if (i & (1 << bit)) result |= 1 << (Math.log2(FFT_SIZE) - 1 - bit);
-  return result;
-});
-const cosines = Float64Array.from({ length: FFT_SIZE / 2 }, (_, i) => Math.cos((2 * Math.PI * i) / FFT_SIZE));
-const sines = Float64Array.from({ length: FFT_SIZE / 2 }, (_, i) => Math.sin((2 * Math.PI * i) / FFT_SIZE));
-const re = new Float64Array(FFT_SIZE);
-const im = new Float64Array(FFT_SIZE);
-
-export function spectrumAt(samples, end, target) {
-  const start = end - FFT_SIZE;
-  for (let i = 0; i < FFT_SIZE; i++) {
-    const index = reversed[i];
-    re[index] = (start + i >= 0 ? samples[start + i] : 0) * window[i];
-    im[index] = 0;
-  }
-  for (let size = 2; size <= FFT_SIZE; size *= 2) {
-    const half = size / 2;
-    const step = FFT_SIZE / size;
-    for (let offset = 0; offset < FFT_SIZE; offset += size) {
-      for (let k = 0; k < half; k++) {
-        const c = cosines[k * step];
-        const s = sines[k * step];
-        const a = offset + k;
-        const b = a + half;
-        const tr = re[b] * c + im[b] * s;
-        const ti = im[b] * c - re[b] * s;
-        re[b] = re[a] - tr;
-        im[b] = im[a] - ti;
-        re[a] += tr;
-        im[a] += ti;
-      }
-    }
-  }
-  for (let bin = 0; bin < target.length; bin++) {
-    const magnitude = Math.hypot(re[bin], im[bin]) / FFT_SIZE;
-    const decibels = 20 * Math.log10(magnitude || 1e-12);
-    target[bin] = Math.max(0, Math.min(255, (255 * (decibels - MIN_DB)) / (MAX_DB - MIN_DB)));
-  }
-}
+export const spectrumAt = createAnalyserSpectrum({ fftSize: FFT_SIZE, minDb: MIN_DB, maxDb: MAX_DB });
 
 export function analyze(file) {
   const samples = decode(file);
