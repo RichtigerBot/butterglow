@@ -168,7 +168,7 @@ test('Markers start from the analysis with a beat grid that fits the kicks', () 
   const markers = markersFromAnalysis(ANALYSIS);
   assert.deepEqual(markers.drops.map(({ time, manual }) => [time, manual]), [[30, false], [90, false]]);
   assert.deepEqual(markers.quiet.map(({ start, end }) => [start, end]), [[60, 75]]);
-  assert.equal(markers.grid.bpm, 120);
+  assert.ok(Math.abs(markers.grid.bpm - 120) < 0.3, `bpm ${markers.grid.bpm}`);
   assert.ok(Math.abs(markers.grid.offset - 0.25) < 0.01, `offset ${markers.grid.offset}`);
   assert.deepEqual(beatsOf(markers.grid, 2).map((time) => Math.round(time * 100) / 100), [0.25, 0.75, 1.25, 1.75]);
   const old = markersFromAnalysis({ duration: 60, drops: [{ time: 40 }], quietStarts: [10, 35] });

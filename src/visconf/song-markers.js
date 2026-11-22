@@ -53,6 +53,8 @@ export function gridFromBeats(beats, bpm) {
     const result = fit(beats, 60 / candidate);
     if (result.strength > best.strength) best = { bpm: candidate, ...result };
   }
+  // A best fit at the edge of the range is no real optimum, just noise pulling outwards: keep the detected tempo.
+  if (Math.abs(best.bpm - bpm) >= REFINE_BPM - 0.005) best = { bpm, ...fit(beats, 60 / bpm) };
   const tempo = round(best.bpm);
   return { bpm: tempo, offset: normalizeOffset(best.phase, tempo), manual: false };
 }
