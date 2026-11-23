@@ -71,6 +71,7 @@ export function normalizeCue(cue) {
     transition: TRANSITIONS.includes(cue.transition) ? cue.transition : 'cut',
     origin: ORIGINS.includes(cue.origin) ? cue.origin : 'manual',
     label: text(cue.label, NAME_MAX),
+    marker: text(cue.marker, 100), // id of the drop or quiet part the cue follows, '' if none
   };
 }
 
@@ -138,14 +139,54 @@ export function snapToBeat(time, beats, maxDistance = SNAP_SECONDS) {
   return best ?? time;
 }
 
+// The points where markers want a change: every drop (hard cut) and the start of every quiet part (soft).
+const markerPoints = (markers) => [
+  ...(markers?.drops ?? []).map(({ id, time }) => ({ id, time, origin: 'drop', transition: 'cut' })),
+  ...(markers?.quiet ?? []).map(({ id, start }) => ({ id, time: start, origin: 'quiet', transition: 'soft' })),
+];
+const cueForPoint = ({ id, time, origin, transition }, pool) => normalizeCue({ time, preset: { mode: 'random', pool }, transition, origin, marker: id });
+
 // A first draft from the song markers (song-markers.js, possibly edited by hand): a hard cut on every drop,
-// a soft change at the start of every quiet part, each with a random preset from `pool`.
+// a soft change at the start of every quiet part, each with a random preset from `pool`. Each cue follows its marker.
 export function cuesFromMarkers(markers, { pool = ALL_PRESETS } = {}) {
-  const preset = { mode: 'random', pool };
-  return sortCues([
-    ...(markers?.drops ?? []).map(({ time }) => normalizeCue({ time, preset, transition: 'cut', origin: 'drop' })),
-    ...(markers?.quiet ?? []).map(({ start }) => normalizeCue({ time: start, preset, transition: 'soft', origin: 'quiet' })),
-  ]);
+  return sortCues(markerPoints(markers).map((point) => cueForPoint(point, pool)));
+}
+
+// The marker a cue follows: by id, or for cues saved before the link existed, a draft cue at the marker's time.
+function linkedPoint(cue, points) {
+  if (cue.marker) return points.find((point) => point.id === cue.marker) ?? null;
+  return points.find((point) => point.origin === cue.origin && Math.abs(point.time - cue.time) < 0.01) ?? null;
+}
+
+// After the markers changed from `before` to `after`: cues of a marker move with it and go when it is deleted, and
+// every new marker gets a cue of its own. Returns the same visconf if nothing changed.
+export function followMarkers(visconf, before, after, { pool = ALL_PRESETS } = {}) {
+  if (!visconf || before === after) return visconf;
+  const old = markerPoints(before);
+  const now = new Map(markerPoints(after).map((point) => [point.id, point]));
+  const known = new Set(old.map((point) => point.id));
+  let touched = false;
+  const cues = [];
+  for (const cue of visconf.cues) {
+    const link = linkedPoint(cue, old);
+    if (!link) {
+      cues.push(cue);
+      continue;
+    }
+    const point = now.get(link.id);
+    if (!point) {
+      touched = true; // its marker was deleted
+      continue;
+    }
+    if (point.time !== cue.time || cue.marker !== link.id) touched = true;
+    cues.push({ ...cue, time: point.time, marker: link.id });
+  }
+  for (const point of now.values()) {
+    if (known.has(point.id)) continue;
+    cues.push(cueForPoint(point, pool));
+    touched = true;
+  }
+  return touched ? changed(visconf, cues) : visconf;
 }
 
 // Export file: the visconfs and, if given, the song analyses and markers (both keyed by songKey), so waveform and

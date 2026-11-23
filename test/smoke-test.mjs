@@ -1261,22 +1261,45 @@ try {
     const dragged = await vcPage.evaluate(async () => {
       const { songMarkers } = await chrome.storage.local.get('songMarkers');
       const saved = Object.values(songMarkers ?? {})[0];
-      return { live: app.visconfPanel.state.markers.drops.map(({ time, manual }) => [time, manual]), saved: saved?.drops.map(({ time }) => time) };
+      const { markers, visconf } = app.visconfPanel.state;
+      return { live: markers.drops.map(({ time, manual }) => [time, manual]), saved: saved?.drops.map(({ time }) => time), cues: visconf.cues.map(({ time }) => time) };
     });
     check(
       'Dragging a drop moves it onto the beat, marks it as set by hand and saves it',
       dragged.live.length === 1 && Math.abs(dragged.live[0][0] - 120) < 0.6 && dragged.live[0][0] * 2 === Math.round(dragged.live[0][0] * 2) && dragged.live[0][1] && dragged.saved?.[0] === dragged.live[0][0],
       JSON.stringify(dragged),
     );
+    check('The change of a drop moves along with it', dragged.cues.includes(dragged.live[0][0]) && !dragged.cues.includes(100), JSON.stringify(dragged.cues));
 
     await vcPage.mouse.click(xAt(400), waveY);
     await vcPage.mouse.click(xAt(400), waveY);
     await sleep(200);
-    const added = await vcPage.evaluate(() => ({ drops: app.visconfPanel.state.markers.drops.length, selected: app.visconfPanel.state.selected?.kind }));
+    const counts = () => vcPage.evaluate(() => ({ drops: app.visconfPanel.state.markers.drops.length, cues: app.visconfPanel.state.visconf.cues.length, selected: app.visconfPanel.state.selected?.kind }));
+    const added = await counts();
     await vcPage.keyboard.press('Delete');
     await sleep(200);
-    const afterDelete = await vcPage.evaluate(() => app.visconfPanel.state.markers.drops.length);
-    check('Double-click adds a drop, Delete removes it again', added.drops === 2 && added.selected === 'drop' && afterDelete === 1, JSON.stringify({ added, afterDelete }));
+    const afterDelete = await counts();
+    check(
+      'Double-click adds a drop with its own change, Delete removes both again',
+      added.drops === 2 && added.cues === 3 && added.selected === 'drop' && afterDelete.drops === 1 && afterDelete.cues === 2,
+      JSON.stringify({ added, afterDelete }),
+    );
+    await vcPage.keyboard.down('Control');
+    await vcPage.keyboard.press('z');
+    await vcPage.keyboard.up('Control');
+    await sleep(200);
+    const undone = await counts();
+    await vcPage.keyboard.down('Control');
+    await vcPage.keyboard.press('y');
+    await vcPage.keyboard.up('Control');
+    await sleep(700);
+    const redone = await counts();
+    const savedCues = await vcPage.evaluate(async () => (await chrome.storage.local.get('visconfs')).visconfs?.[0]?.cues.length);
+    check(
+      'Ctrl+Z brings the deleted drop back, Ctrl+Y removes it again',
+      undone.drops === 2 && undone.cues === 3 && redone.drops === 1 && redone.cues === 2 && savedCues === 2,
+      JSON.stringify({ undone, redone, savedCues }),
+    );
 
     await vcPage.mouse.click(xAt(300), cueY);
     await vcPage.mouse.click(xAt(300), cueY);
@@ -1284,6 +1307,25 @@ try {
     const cueCount = await vcPage.evaluate(() => app.visconfPanel.state.visconf.cues.length);
     const inspector = await vcPage.$eval('.vc-inspector', (element) => element.querySelectorAll('select').length);
     check('Double-click in the cue lane adds a change and shows its settings', cueCount === 3 && inspector >= 3, `${cueCount} cues, ${inspector} selects`);
+
+    // Dragging a drop while the song has no visconf used to put an empty entry into the list and break saving.
+    const withoutVisconf = await vcPage.evaluate(async () => {
+      const panel = app.visconfPanel;
+      const keep = panel.state.visconf;
+      panel.update({ visconf: null }, { save: false, record: false });
+      return keep.id;
+    });
+    await vcPage.mouse.move(xAt(dragged.live[0][0]), waveY);
+    await vcPage.mouse.down();
+    await vcPage.mouse.move(xAt(dragged.live[0][0] + 20), waveY, { steps: 5 });
+    await vcPage.mouse.up();
+    await sleep(700);
+    const noVisconf = await vcPage.evaluate(() => ({ status: document.querySelector('#visconf .vc-status').textContent, broken: app.visconfPanel.state.visconfs.some((entry) => !entry) }));
+    check('Dragging a drop without a visconf saves without an error', !noVisconf.broken && !/save|speicher/i.test(noVisconf.status), JSON.stringify(noVisconf));
+    await vcPage.evaluate((id) => {
+      const panel = app.visconfPanel;
+      panel.update({ visconf: panel.state.visconfs.find((entry) => entry.id === id) }, { record: false });
+    }, withoutVisconf);
 
     // Playback: a fixed preset 1.5 s ahead of the playhead must show up on time.
     const target = await vcPage.evaluate(async () => {

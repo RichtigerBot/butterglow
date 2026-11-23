@@ -102,7 +102,8 @@ export function applyDrag({ markers, visconf }, hit, from, to, { snap = false, n
   switch (hit.kind) {
     case 'cue': {
       const cue = visconf.cues.find((entry) => entry.id === hit.id);
-      return { markers, visconf: updateCue(visconf, hit.id, { time: Math.max(0, at(cue.time + delta)) }) };
+      // Moved by hand, the cue no longer follows its marker.
+      return { markers, visconf: updateCue(visconf, hit.id, { time: Math.max(0, at(cue.time + delta)), marker: '', origin: 'manual' }) };
     }
     case 'drop': {
       const drop = markers.drops.find((entry) => entry.id === hit.id);

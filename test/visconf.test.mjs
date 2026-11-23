@@ -8,6 +8,7 @@ import {
   createVisconf,
   cueAt,
   cuesFromMarkers,
+  followMarkers,
   fromFile,
   normalizeTitle,
   removeCue,
@@ -154,6 +155,32 @@ test('A draft from the markers: cut on drops, soft at quiet parts', () => {
       [60, 'cut', 'drop', 'favorites'],
     ],
   );
+});
+
+test('Changes follow their drops and quiet parts: moved, deleted and added with them', () => {
+  const markers = markersFromAnalysis({ duration: 120, drops: [{ time: 60, strength: 1 }], quietParts: [{ start: 30, end: 40 }] });
+  const [quietPart] = markers.quiet;
+  const [drop] = markers.drops;
+  // An older visconf without links, plus a change set by hand.
+  const visconf = createVisconf({
+    song: SONG,
+    cues: [
+      { time: 30, origin: 'quiet', transition: 'soft', preset: { mode: 'fixed', name: 'Calm' } },
+      { time: 60, origin: 'drop' },
+      { time: 90, origin: 'manual' },
+    ],
+  });
+  const moved = followMarkers(visconf, markers, moveDrop(markers, drop.id, 64));
+  assert.deepEqual(moved.cues.map(({ time, marker }) => [time, marker]), [[30, quietPart.id], [64, drop.id], [90, '']]);
+  const added = followMarkers(moved, markers, addDrop(markers, 100));
+  assert.deepEqual(added.cues.map(({ time, transition, origin }) => [time, transition, origin]), [[30, 'soft', 'quiet'], [60, 'cut', 'drop'], [90, 'cut', 'manual'], [100, 'cut', 'drop']]);
+  const removed = followMarkers(visconf, markers, removeQuiet(removeDrop(markers, drop.id), quietPart.id));
+  assert.deepEqual(removed.cues.map(({ time }) => time), [90]);
+  const shifted = followMarkers(visconf, markers, updateQuiet(markers, quietPart.id, { start: 25, end: 35 }));
+  assert.equal(shifted.cues[0].preset.name, 'Calm', 'the cue keeps its preset');
+  assert.equal(shifted.cues[0].time, 25);
+  assert.equal(followMarkers(visconf, markers, markers), visconf, 'nothing changed');
+  assert.ok(cuesFromMarkers(markers).every((cue) => cue.marker), 'a draft links every cue');
 });
 
 const ANALYSIS = {

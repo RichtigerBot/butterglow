@@ -12,13 +12,14 @@ import { createCuePlayer, createSongClock, resolvePreset } from '../visconf/cue-
 import { analyzeSong, createSongRecorder, decodeSong } from '../visconf/song-analysis.js';
 import { addDrop, beatsOf, createTapTempo, removeDrop, removeQuiet, setDownbeat, setTempo } from '../visconf/song-markers.js';
 import { LAYOUT, applyDrag, followView, formatTime, fullView, hitTest, insertCue, scrollView, snapTime, timeToX, xToTime, zoomView } from '../visconf/timeline-geometry.js';
-import { ALL_PRESETS, FILE_NAME, createVisconf, cueAt, cuesFromMarkers, fromFile, removeCue, sameSong, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
+import { ALL_PRESETS, FILE_NAME, createVisconf, cueAt, cuesFromMarkers, followMarkers, fromFile, removeCue, sameSong, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
 import { createVisconfStore } from '../visconf/visconf-store.js';
 
 const SOFT_BLEND_SECONDS = 3;
 const SAVE_DELAY_MS = 400;
 const DOUBLE_CLICK_MS = 350;
 const DRAG_START_PX = 3;
+const HISTORY_LIMIT = 100;
 const COLORS = {
   background: 'rgb(255 255 255 / 4%)',
   wave: 'rgb(170 160 255 / 70%)',
@@ -65,6 +66,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   let drag = null;
   let lastClick = { time: 0, x: -99 };
   let saveTimer = null;
+  let loadToken = 0; // a newer loadSong() makes older ones stop where they are
+  let undoStack = []; // states before each change: { markers, visconfs, visconfId }
+  let redoStack = [];
   let analysing = null; // AbortController while a file is analysed
   let recorder = null;
   let status = null; // function, so it follows a language switch
@@ -104,15 +108,25 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   };
 
   async function loadSong(next) {
+    const token = ++loadToken;
     stopRecording(false);
-    song = songOf(next);
-    titleInput.value = song.title;
-    artistInput.value = song.artist;
-    analysis = song.title ? await store.analysisFor(song) : null;
-    markers = song.title ? await store.markersFor(song) : null;
+    if (saveTimer) await saveNow(); // changes to the previous song are saved first
+    const nextSong = songOf(next);
+    titleInput.value = nextSong.title;
+    artistInput.value = nextSong.artist;
+    const [nextAnalysis, nextMarkers, nextVisconfs] = nextSong.title
+      ? await Promise.all([store.analysisFor(nextSong), store.markersFor(nextSong), store.forSong(nextSong)])
+      : [null, null, []];
+    if (token !== loadToken) return;
+    song = nextSong;
+    analysis = nextAnalysis;
+    markers = nextMarkers;
     duration = analysis?.duration || markers?.duration || song.duration || 0;
-    visconfs = song.title ? await store.forSong(song) : [];
+    visconfs = nextVisconfs;
     visconf = visconfs[0] ?? null;
+    undoStack = [];
+    redoStack = [];
+    renderHistory();
     view = fullView(duration);
     selected = null;
     cuePlayer.load(visconf);
@@ -130,13 +144,12 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   async function saveNow() {
     clearTimeout(saveTimer);
     saveTimer = null;
-    if (!song.title) return;
+    // What is saved is taken now: the song or the visconf may change while the storage is busy.
+    const target = { song, markers, visconf };
+    if (!target.song.title) return;
     try {
-      if (markers) await store.saveMarkers(song, markers);
-      if (visconf) {
-        visconf = await store.save(visconf);
-        visconfs = visconfs.map((entry) => (entry.id === visconf.id ? visconf : entry));
-      }
+      if (target.markers) await store.saveMarkers(target.song, target.markers);
+      if (target.visconf) await store.save(target.visconf);
     } catch (error) {
       console.error(error);
       setStatus(() => t('visconf.saveFailed', { error: error.message }));
@@ -144,11 +157,16 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   }
 
   // Applies a change to markers and/or the visconf. `save`: false while dragging, saved on release.
-  function update(next, { save = true } = {}) {
+  // `record`: false if the state before was already put on the undo stack (drag, second half of a change).
+  function update(next, { save = true, record = save } = {}) {
+    if (record) remember();
     if (next.markers !== undefined) markers = next.markers;
-    if (next.visconf !== undefined) {
+    if (next.visconf !== undefined && next.visconf !== visconf) {
       visconf = next.visconf;
-      visconfs = visconfs.some((entry) => entry.id === visconf.id) ? visconfs.map((entry) => (entry.id === visconf.id ? visconf : entry)) : [visconf, ...visconfs];
+      if (visconf) {
+        const id = visconf.id;
+        visconfs = visconfs.some((entry) => entry.id === id) ? visconfs.map((entry) => (entry.id === id ? visconf : entry)) : [visconf, ...visconfs];
+      }
       cuePlayer.load(visconf);
     }
     if (save) scheduleSave();
@@ -157,11 +175,72 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     changed();
   }
 
-  function ensureVisconf() {
+  function ensureVisconf({ record = true } = {}) {
     if (visconf || !song.title) return visconf;
-    update({ visconf: createVisconf({ name: t('visconf.defaultName', { number: 1 }), song: { ...song, duration } }) });
+    update({ visconf: createVisconf({ name: t('visconf.defaultName', { number: 1 }), song: { ...song, duration } }) }, { record });
     renderSelect();
     return visconf;
+  }
+
+  // A change of the markers, with the cues that follow them (followMarkers). `base`: the state the change was made
+  // from. Without a visconf, the first new marker makes one, with a cue on every marker.
+  function markerChange(nextMarkers, base = { markers, visconf }) {
+    if (base.visconf) return { markers: nextMarkers, visconf: followMarkers(base.visconf, base.markers, nextMarkers) };
+    const added = nextMarkers.drops.length + nextMarkers.quiet.length > (base.markers?.drops.length ?? 0) + (base.markers?.quiet.length ?? 0);
+    if (!added || !song.title) return { markers: nextMarkers };
+    return { markers: nextMarkers, visconf: createVisconf({ name: t('visconf.defaultName', { number: 1 }), song: { ...song, duration }, cues: cuesFromMarkers(nextMarkers) }) };
+  }
+
+  // --- Undo and redo (Ctrl+Z, Ctrl+Y) ---
+
+  const snapshot = () => ({ markers, visconfs, visconfId: visconf?.id ?? null });
+  function renderHistory() {
+    $('.vc-undo').disabled = undoStack.length === 0;
+    $('.vc-redo').disabled = redoStack.length === 0;
+  }
+  function remember() {
+    undoStack.push(snapshot());
+    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    redoStack = [];
+    renderHistory();
+  }
+  async function restoreState(state) {
+    const removed = visconfs.filter((entry) => !state.visconfs.some((kept) => kept.id === entry.id));
+    const changedOnes = state.visconfs.filter((entry) => !visconfs.includes(entry));
+    markers = state.markers;
+    visconfs = state.visconfs;
+    visconf = visconfs.find((entry) => entry.id === state.visconfId) ?? visconfs[0] ?? null;
+    if (selected && !(selected.kind === 'cue' ? visconf?.cues : selected.kind === 'drop' ? markers?.drops : markers?.quiet)?.some((entry) => entry.id === selected.id)) selected = null;
+    cuePlayer.load(visconf);
+    renderSelect();
+    renderTools();
+    renderInspector();
+    changed();
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    const target = song;
+    try {
+      for (const entry of removed) await store.remove(entry.id);
+      for (const entry of changedOnes) await store.save(entry);
+      if (state.markers) await store.saveMarkers(target, state.markers);
+    } catch (error) {
+      console.error(error);
+      setStatus(() => t('visconf.saveFailed', { error: error.message }));
+    }
+  }
+  function undo() {
+    if (!undoStack.length) return false;
+    redoStack.push(snapshot());
+    restoreState(undoStack.pop());
+    renderHistory();
+    return true;
+  }
+  function redo() {
+    if (!redoStack.length) return false;
+    undoStack.push(snapshot());
+    restoreState(redoStack.pop());
+    renderHistory();
+    return true;
   }
 
   async function useAnalysis(result) {
@@ -172,9 +251,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     await store.saveAnalysis(song, result);
     markers = await store.markersFor(song);
     view = fullView(duration);
-    if (!visconf) {
-      ensureVisconf();
-      update({ visconf: { ...visconf, cues: cuesFromMarkers(markers) } });
+    if (!visconf && song.title) {
+      update({ visconf: createVisconf({ name: t('visconf.defaultName', { number: 1 }), song: { ...song, duration }, cues: cuesFromMarkers(markers) }) }, { record: false });
+      renderSelect();
     }
     renderTools();
     changed();
@@ -399,9 +478,13 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     hover = point;
     if (drag) {
       if (!drag.moved && Math.abs(point.x - drag.point.x) < DRAG_START_PX) return;
+      if (!drag.moved) remember();
       drag.moved = true;
       const to = xToTime(view, point.width, Math.max(0, Math.min(point.width, point.x)));
-      update(applyDrag(drag.start, drag.hit, drag.from, to, { snap: snapToggle.checked, newQuiet: drag.newQuiet }), { save: false });
+      const result = applyDrag(drag.start, drag.hit, drag.from, to, { snap: snapToggle.checked, newQuiet: drag.newQuiet });
+      // Cues follow their markers. A new visconf (first marker drawn without one) is only made on release.
+      const next = drag.start.visconf ? markerChange(result.markers, { markers: drag.start.markers, visconf: result.visconf }) : { markers: result.markers };
+      update(next, { save: false });
     }
     showTooltip(point);
     dirty = true;
@@ -409,9 +492,16 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
 
   canvas.addEventListener('pointerup', (event) => {
     if (!drag) return;
-    const { hit, moved, point } = drag;
+    const { hit, moved, point, start: drag0 } = drag;
     drag = null;
     if (moved) {
+      if (!visconf && markers) {
+        const next = markerChange(markers, { markers: drag0.markers, visconf: null });
+        if (next.visconf) {
+          update(next, { record: false });
+          renderSelect();
+        }
+      }
       scheduleSave();
       return;
     }
@@ -420,14 +510,18 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     lastClick = { time: now, x: point.x };
     if (double && hit.kind === 'wave' && markers) {
       const known = new Set(markers.drops.map((drop) => drop.id));
-      update({ markers: addDrop(markers, snapTime(hit.time, markers, snapToggle.checked)) });
+      const hadVisconf = Boolean(visconf);
+      update(markerChange(addDrop(markers, snapTime(hit.time, markers, snapToggle.checked))));
+      if (!hadVisconf) renderSelect();
       selected = { kind: 'drop', id: markers.drops.find((drop) => !known.has(drop.id))?.id };
       renderInspector();
       return;
     }
-    if (double && hit.kind === 'cues' && ensureVisconf()) {
+    if (double && hit.kind === 'cues' && song.title) {
+      remember();
+      ensureVisconf({ record: false });
       const known = new Set(visconf.cues.map((cue) => cue.id));
-      update({ visconf: insertCue(visconf, hit.time, { markers, snap: snapToggle.checked }) });
+      update({ visconf: insertCue(visconf, hit.time, { markers, snap: snapToggle.checked }) }, { record: false });
       selected = { kind: 'cue', id: visconf.cues.find((cue) => !known.has(cue.id))?.id };
       renderInspector();
       return;
@@ -524,7 +618,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
         text('span', isDrop ? t('visconf.dropAt', { time: formatTime(entry.time) }) : t('visconf.quietFromTo', { start: formatTime(entry.start), end: formatTime(entry.end) })),
         text('span', t(entry.manual ? 'visconf.byHand' : 'visconf.automatic'), 'vc-origin'),
         button(t('visconf.delete'), () => {
-          update({ markers: isDrop ? removeDrop(markers, entry.id) : removeQuiet(markers, entry.id) });
+          update(markerChange(isDrop ? removeDrop(markers, entry.id) : removeQuiet(markers, entry.id)));
           selected = null;
           renderInspector();
         }),
@@ -711,6 +805,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     }
     deleteArmed = null;
     $('.vc-delete').textContent = '🗑';
+    remember();
     await store.remove(visconf.id);
     visconfs = visconfs.filter((entry) => entry.id !== visconf.id);
     visconf = visconfs[0] ?? null;
@@ -731,7 +826,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     if (bpm) update({ markers: setTempo(markers, bpm) });
     // The last tap lands on a beat: during playback the grid follows the taps.
     const position = playheadTime();
-    if (bpm && position !== null) update({ markers: setDownbeat(markers, position) });
+    if (bpm && position !== null) update({ markers: setDownbeat(markers, position) }, { record: false });
   });
   $('.vc-downbeat').addEventListener('click', () => {
     const position = playheadTime();
@@ -739,20 +834,25 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     else setStatus(() => t('visconf.needPlayhead'));
   });
   $('.vc-draft').addEventListener('click', () => {
-    if (!markers || !ensureVisconf()) return;
+    if (!markers || !song.title) return;
+    remember();
+    ensureVisconf({ record: false });
     // An existing plan is not overwritten: the draft becomes a new visconf.
     if (visconf.cues.length > 0) {
-      update({ visconf: createVisconf({ name: t('visconf.draftName'), song: { ...song, duration }, cues: cuesFromMarkers(markers) }) });
+      update({ visconf: createVisconf({ name: t('visconf.draftName'), song: { ...song, duration }, cues: cuesFromMarkers(markers) }) }, { record: false });
       renderSelect();
-    } else update({ visconf: { ...visconf, cues: cuesFromMarkers(markers) } });
+    } else update({ visconf: { ...visconf, cues: cuesFromMarkers(markers) } }, { record: false });
   });
   $('.vc-restore').addEventListener('click', async () => {
+    remember();
     markers = await store.resetMarkers(song);
     selected = null;
     renderInspector();
     renderTools();
     changed();
   });
+  $('.vc-undo').addEventListener('click', () => undo());
+  $('.vc-redo').addEventListener('click', () => redo());
   $('.vc-fit').addEventListener('click', () => {
     view = fullView(duration);
     changed();
@@ -773,7 +873,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     if (!file) return;
     try {
       const count = await store.merge(fromFile(await file.text()));
-      await loadSong(song);
+      await loadSong(song); // also starts a new undo history: the import is saved already
       setStatus(() => t('visconf.imported', { count }));
     } catch (error) {
       const reason = { 'not-json': 'visconf.importNotJson', 'not-visconfs': 'visconf.importWrongFile', 'too-new': 'visconf.importTooNew' }[error.message];
@@ -781,13 +881,25 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     }
   });
 
+  const typing = (target) => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+  window.addEventListener('keydown', (event) => {
+    if (!open || typing(event.target) || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+    const key = event.key.toLowerCase();
+    const wantsUndo = key === 'z' && !event.shiftKey;
+    const wantsRedo = key === 'y' || (key === 'z' && event.shiftKey);
+    if (!wantsUndo && !wantsRedo) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const done = wantsUndo ? undo() : redo();
+    setStatus(() => t(done ? (wantsUndo ? 'visconf.undone' : 'visconf.redone') : wantsUndo ? 'visconf.nothingToUndo' : 'visconf.nothingToRedo'));
+  });
   window.addEventListener('keydown', (event) => {
     if (!open || !selected || !['Delete', 'Backspace'].includes(event.key)) return;
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+    if (typing(event.target)) return;
     event.preventDefault();
     if (selected.kind === 'cue') update({ visconf: removeCue(visconf, selected.id) });
-    else if (selected.kind === 'drop') update({ markers: removeDrop(markers, selected.id) });
-    else update({ markers: removeQuiet(markers, selected.id) });
+    else if (selected.kind === 'drop') update(markerChange(removeDrop(markers, selected.id)));
+    else update(markerChange(removeQuiet(markers, selected.id)));
     selected = null;
     renderInspector();
   });
@@ -906,6 +1018,8 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     useAnalysis,
     loadFile,
     update,
+    undo,
+    redo,
     setPlay(on) {
       playToggle.checked = on;
       if (!on) stopPlayback();
