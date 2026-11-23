@@ -187,6 +187,8 @@ export function createPlayer({ root, controller, settings }) {
       return pinned;
     },
     toggle: () => send('toggle'),
+    // `fraction` 0 to 1 of the track, like the progress bar.
+    seek: (fraction) => send('seek', fraction),
     // Call after a change in the menu.
     applySettings,
   };

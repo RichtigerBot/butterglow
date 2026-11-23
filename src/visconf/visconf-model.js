@@ -38,6 +38,13 @@ export function songOf({ title, artist, duration } = {}) {
   return { title: text(title), artist: text(artist), duration: Number.isFinite(duration) && duration > 0 ? round(duration) : 0 };
 }
 
+// "Artist - Title (Official Video).mp3" → { artist, title }; without " - " everything is the title.
+export function songFromFileName(name) {
+  const base = String(name).replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_][A-Za-z0-9_-]{11}$/, ''); // YouTube id at the end
+  const split = base.indexOf(' - ');
+  return split > 0 ? { artist: base.slice(0, split).trim(), title: base.slice(split + 3).trim() } : { artist: '', title: base.trim() };
+}
+
 export function songKey(song) {
   return `${normalizeTitle(song.artist)}|${normalizeTitle(song.title)}`;
 }

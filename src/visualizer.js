@@ -13,6 +13,7 @@ import { createFrameScheduler } from './ui/frame-scheduler.js';
 import { createPresetBrowser } from './ui/preset-browser.js';
 import { createPresetEditor } from './ui/preset-editor.js';
 import { createSidePanels } from './ui/side-panels.js';
+import { createVisconfPanel } from './ui/visconf-panel.js';
 import { PresetLibrary } from './ui/preset-library.js';
 import { createQuality, qualitySettings } from './ui/quality.js';
 import { createSettingsPanel } from './ui/settings-panel.js';
@@ -54,6 +55,7 @@ let water = null;
 let presetBrowser = null;
 let presetEditor = null;
 let presetReference = null;
+let visconfPanel = null;
 let sidePanels = null;
 let player = null;
 let library = null;
@@ -144,7 +146,9 @@ function renderFrame(now) {
   lastFrame = frame;
   // Automatic switch. If the visualizer already exists, activate() switches immediately, and the new one draws
   // this very frame, so on a drop with its drop effect.
-  const busy = switching || crossfade.running || presetEditor?.open || presetReference?.open || presetBrowser?.open;
+  // A playing visconf decides the presets itself, so the visualizer stays where it is.
+  visconfPanel?.frame(frame, now);
+  const busy = switching || crossfade.running || presetEditor?.open || presetReference?.open || presetBrowser?.open || visconfPanel?.playing;
   const decision = autoSwitch?.update(frame, now / 1000, { current: activeIndex, busy });
   if (decision) activate(decision.index, { durationMs: decision.durationMs });
   active?.render(frame);
@@ -213,6 +217,7 @@ async function toggleFullscreen() {
 const keyActions = {
   v: () => activate((activeIndex + 1) % visualizers.length),
   e: () => equalizer?.toggle(),
+  t: () => visconfPanel?.toggle(),
   // Browser, editor and reference stand side by side as far as the window allows (side-panels.js).
   b: () => presetBrowser?.toggle(),
   m: () => presetEditor?.toggle(),
@@ -223,6 +228,7 @@ const keyActions = {
     presetBrowser?.close();
     presetEditor?.close();
     presetReference?.close();
+    visconfPanel?.close();
   },
   f: toggleFullscreen,
   ArrowRight: () => active?.nextPreset?.(),
@@ -271,7 +277,7 @@ window.addEventListener('keydown', (event) => {
   if (isControl && event.key.startsWith('Arrow')) return;
   // While typing in a text field (search, name of a collection), letters do not count as shortcuts.
   const isTyping =
-    event.target instanceof HTMLTextAreaElement || (event.target instanceof HTMLInputElement && ['text', 'search'].includes(event.target.type));
+    event.target instanceof HTMLTextAreaElement || (event.target instanceof HTMLInputElement && ['text', 'search', 'number'].includes(event.target.type));
   if (isTyping && event.key !== 'Escape') return;
   // On a button, the space bar already triggers the button itself.
   if (event.key === ' ' && event.target instanceof HTMLButtonElement) return;
@@ -287,7 +293,7 @@ let idleTimer;
 function wake() {
   document.body.classList.remove('idle');
   clearTimeout(idleTimer);
-  if (equalizer?.open || presetBrowser?.open || presetEditor?.open || presetReference?.open) return;
+  if (equalizer?.open || presetBrowser?.open || presetEditor?.open || presetReference?.open || visconfPanel?.open) return;
   idleTimer = setTimeout(goIdle, HUD_IDLE_MS);
 }
 // An open dropdown would otherwise be left standing alone when the menu hides. So while a select has
@@ -469,6 +475,17 @@ async function start() {
   });
   if (params.has('streamId')) watchForSilence(controller);
 
+  visconfPanel = createVisconfPanel({
+    root: document.getElementById('visconf'),
+    getMilkdrop: () => (active?.selectPreset ? active : null),
+    getPlayerState: () => player.state,
+    seek: (fraction) => player.seek(fraction),
+    library,
+    getLookahead: () => engine.lookahead,
+    getInputPeak: () => engine.inputPeak(),
+    onChange: wake,
+  });
+
   // The water is a bonus: if WebGL 2 is missing, the rest keeps running without it.
   try {
     waterSettingsLive = settingsPanel.settingsFor('water', waterSettings);
@@ -534,6 +551,9 @@ globalThis.app = {
   },
   get presetReference() {
     return presetReference;
+  },
+  get visconfPanel() {
+    return visconfPanel;
   },
   get equalizer() {
     return equalizer;

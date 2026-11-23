@@ -144,6 +144,7 @@ export async function createMilkdrop({ stage, engine, settings, onPresetChange, 
   // Version that ran before the last change. If an edited version breaks while drawing, it goes back there.
   let fallback = null;
   let holdAutoAdvance = false;
+  const holds = new Set();
   const editErrorListeners = new Set();
   const presetFor = (name) => edits.get(name) ?? presets[name];
 
@@ -352,9 +353,12 @@ export async function createMilkdrop({ stage, engine, settings, onPresetChange, 
     dropEdit(name) {
       if (name !== order[index]) edits.delete(name);
     },
-    // While the editor is open, the preset does not change by itself.
-    holdAutoAdvance(hold) {
-      holdAutoAdvance = hold;
+    // While the editor is open or a visconf plays, the preset does not change by itself. Each one holds under its own
+    // name, so closing the editor does not end the hold of a running visconf.
+    holdAutoAdvance(hold, reason = 'editor') {
+      if (hold) holds.add(reason);
+      else holds.delete(reason);
+      holdAutoAdvance = holds.size > 0;
       lastChange = performance.now();
     },
     // Reports runtime errors of an edited version. Returns a function to unsubscribe.

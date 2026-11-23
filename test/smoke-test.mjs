@@ -1214,6 +1214,107 @@ try {
   await page.keyboard.press('v');
   await page.waitForFunction(() => document.getElementById('hud-title').textContent === 'Neon Ring');
 
+  // Visconf editor: timeline with waveform and markers, dragging, new markers and cues, playback of the plan.
+  // The demo player reports "Demo-Beat" with the audio time as position, so the plan can play without a tab.
+  {
+    const vcPage = await browser.newPage();
+    const vcErrors = collectErrors(vcPage);
+    await vcPage.setViewport({ width: 1400, height: 800 });
+    await vcPage.goto(`${baseUrl}?demo=1`);
+    await vcPage.waitForFunction(() => document.getElementById('hud-title').textContent === 'Milkdrop', { timeout: 30000 });
+    if (await vcPage.evaluate(() => app.engine.context.state !== 'running')) await vcPage.click('#status');
+    check('Key hints name the visconf editor', await vcPage.$$eval('#hud-keys kbd', (keys) => keys.some((key) => key.textContent === 'T')));
+    await vcPage.mouse.move(700, 200);
+    await vcPage.keyboard.press('t');
+    await vcPage.waitForFunction(() => !document.getElementById('visconf').hidden && app.visconfPanel.state.song.title === 'Demo-Beat', { timeout: 5000 }).catch(() => {});
+    check('T opens the visconf editor with the song from the player', await vcPage.evaluate(() => !document.getElementById('visconf').hidden && app.visconfPanel.state.song.title === 'Demo-Beat'));
+    await vcPage.evaluate(async () => {
+      const peaks = Array.from({ length: 12000 }, (_, i) => 80 + ((i * 37) % 120));
+      const beats = Array.from({ length: 1200 }, (_, i) => i * 0.5);
+      await app.visconfPanel.useAnalysis({ version: 1, source: 'file', duration: 600, waveform: { perSecond: 20, peaks }, drops: [{ time: 100, strength: 1 }], quietParts: [{ start: 200, end: 260 }], quietStarts: [200], beats, bpm: 120 });
+      app.visconfPanel.update({}); // redraw
+    });
+    await sleep(300);
+    const drawn = await vcPage.$eval('.vc-canvas', (canvas) => {
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let lit = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) lit++;
+      return lit / (data.length / 4);
+    });
+    check('The timeline draws waveform and markers', drawn > 0.3, `${Math.round(drawn * 100)} % of the pixels`);
+    const draft = await vcPage.evaluate(() => app.visconfPanel.state.visconf?.cues.map((cue) => [cue.time, cue.transition]));
+    check('The first visconf starts as a draft: hard on the drop, soft at the quiet part', JSON.stringify(draft) === '[[100,"cut"],[200,"soft"]]', JSON.stringify(draft));
+
+    const box = await vcPage.$eval('.vc-canvas', (canvas) => {
+      const rect = canvas.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, width: rect.width };
+    });
+    const xAt = (time) => box.left + (time / 600) * box.width;
+    const waveY = box.top + 58;
+    const cueY = box.top + 122;
+    await vcPage.mouse.move(xAt(100), waveY);
+    await vcPage.mouse.down();
+    await vcPage.mouse.move(xAt(110), waveY, { steps: 5 });
+    await vcPage.mouse.move(xAt(120.1), waveY, { steps: 5 });
+    await vcPage.mouse.up();
+    await sleep(700);
+    const dragged = await vcPage.evaluate(async () => {
+      const { songMarkers } = await chrome.storage.local.get('songMarkers');
+      const saved = Object.values(songMarkers ?? {})[0];
+      return { live: app.visconfPanel.state.markers.drops.map(({ time, manual }) => [time, manual]), saved: saved?.drops.map(({ time }) => time) };
+    });
+    check(
+      'Dragging a drop moves it onto the beat, marks it as set by hand and saves it',
+      dragged.live.length === 1 && Math.abs(dragged.live[0][0] - 120) < 0.6 && dragged.live[0][0] * 2 === Math.round(dragged.live[0][0] * 2) && dragged.live[0][1] && dragged.saved?.[0] === dragged.live[0][0],
+      JSON.stringify(dragged),
+    );
+
+    await vcPage.mouse.click(xAt(400), waveY);
+    await vcPage.mouse.click(xAt(400), waveY);
+    await sleep(200);
+    const added = await vcPage.evaluate(() => ({ drops: app.visconfPanel.state.markers.drops.length, selected: app.visconfPanel.state.selected?.kind }));
+    await vcPage.keyboard.press('Delete');
+    await sleep(200);
+    const afterDelete = await vcPage.evaluate(() => app.visconfPanel.state.markers.drops.length);
+    check('Double-click adds a drop, Delete removes it again', added.drops === 2 && added.selected === 'drop' && afterDelete === 1, JSON.stringify({ added, afterDelete }));
+
+    await vcPage.mouse.click(xAt(300), cueY);
+    await vcPage.mouse.click(xAt(300), cueY);
+    await sleep(200);
+    const cueCount = await vcPage.evaluate(() => app.visconfPanel.state.visconf.cues.length);
+    const inspector = await vcPage.$eval('.vc-inspector', (element) => element.querySelectorAll('select').length);
+    check('Double-click in the cue lane adds a change and shows its settings', cueCount === 3 && inspector >= 3, `${cueCount} cues, ${inspector} selects`);
+
+    // Playback: a fixed preset 1.5 s ahead of the playhead must show up on time.
+    const target = await vcPage.evaluate(async () => {
+      const panel = app.visconfPanel;
+      const names = app.active.presetNames;
+      const name = names.find((candidate) => candidate !== app.active.presetName && !candidate.includes('FractalDrop'));
+      const now = app.player.state.position;
+      await panel.loadSong({ title: 'Demo-Beat', artist: 'ButterGlow' });
+      const { visconf } = panel.state;
+      panel.update({ visconf: { ...visconf, cues: [{ id: 'a', time: now + 1.5, preset: { mode: 'fixed', name }, transition: 'cut', origin: 'manual', label: '' }] } });
+      panel.setPlay(true);
+      return name;
+    });
+    await vcPage.waitForFunction((name) => app.active.presetName === name, { timeout: 8000 }, target).catch(() => {});
+    const playback = await vcPage.evaluate(() => ({ preset: app.active.presetName, playing: app.visconfPanel.playing }));
+    check('A playing plan switches to the planned preset on time', playback.preset === target && playback.playing, JSON.stringify(playback));
+    await vcPage.screenshot({ path: 'test-output/visconf.png' });
+    await vcPage.evaluate(() => app.visconfPanel.setPlay(false));
+
+    const pickLanguage = (language) => { const select = document.getElementById('hud-language'); select.value = language; select.dispatchEvent(new Event('change', { bubbles: true })); };
+    await vcPage.evaluate(pickLanguage, 'de');
+    await vcPage.waitForFunction(() => document.querySelector('#visconf .vc-load').textContent === 'Datei laden', { timeout: 5000 }).catch(() => {});
+    check('The visconf editor follows the language', await vcPage.$eval('#visconf .vc-load', (button) => button.textContent === 'Datei laden'));
+    await vcPage.evaluate(pickLanguage, 'en');
+    await vcPage.keyboard.press('Escape');
+    check('Escape closes the visconf editor', await vcPage.evaluate(() => document.getElementById('visconf').hidden));
+    check('No errors in the visconf editor', vcErrors.length === 0, vcErrors.slice(0, 3).join(' | '));
+    await vcPage.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers']));
+    await vcPage.close();
+  }
+
   // 4K, also with OS scaling: the image must fill the whole canvas.
   for (const [width, height, scale] of [[3840, 2160, 1], [2560, 1440, 1.5], [1920, 1080, 2]]) {
     const sizePage = await browser.newPage();
