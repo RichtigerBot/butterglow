@@ -36,6 +36,16 @@ export const milkdropSettings = [
     custom: { label: 'settings.customTime', min: 2, max: 3600, default: 45, unit: ' s' },
   },
   { id: 'dropChange', label: 'settings.milkdrop.dropChange', type: 'toggle', default: true },
+  {
+    id: 'whenStopped',
+    label: 'settings.milkdrop.whenStopped',
+    type: 'select',
+    default: 'continue',
+    options: [
+      { value: 'continue', label: 'settings.milkdrop.keepRunning' },
+      { value: 'pause', label: 'settings.milkdrop.pause' },
+    ],
+  },
   waterToggle(false), // Milkdrop fills the whole picture; water is only an option
 ];
 
@@ -111,7 +121,8 @@ function shuffle(items) {
 }
 
 // Plays presets from the library's active collection in random order.
-export async function createMilkdrop({ stage, engine, settings, onPresetChange, library, customPresets }) {
+// `musicStopped()`: true while the music in the tab is paused or stopped (from the media player).
+export async function createMilkdrop({ stage, engine, settings, onPresetChange, library, customPresets, musicStopped = () => false }) {
   // Own presets from the presets folder stand next to the bundled ones. With the same name, the own one wins.
   const presets = { ...(await loadPresets()), ...customPresets?.presetMap() };
   const sortNames = (names) => names.sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
@@ -144,6 +155,7 @@ export async function createMilkdrop({ stage, engine, settings, onPresetChange, 
   // Version that ran before the last change. If an edited version breaks while drawing, it goes back there.
   let fallback = null;
   let holdAutoAdvance = false;
+  let stoppedSince = null; // since when the picture stands still because the music stopped
   const editErrorListeners = new Set();
   const presetFor = (name) => edits.get(name) ?? presets[name];
 
@@ -253,6 +265,17 @@ export async function createMilkdrop({ stage, engine, settings, onPresetChange, 
     render(frame) {
       const now = performance.now();
       if (frame?.section?.drop) pendingDrop = true;
+      // "When the music stops: pause": the picture stands still and goes on from there. Butterchurn counts its
+      // time per drawn frame, so nothing jumps afterwards; the automatic change waits for the paused time too.
+      if (settings.whenStopped === 'pause' && musicStopped()) {
+        if (stoppedSince === null) stoppedSince = now;
+        drewLastFrame = false;
+        return;
+      }
+      if (stoppedSince !== null) {
+        lastChange += now - stoppedSince;
+        stoppedSince = null;
+      }
       const pause = frameGate(now, measuring ? 0 : Number(settings.frameRate) || 0);
       drewLastFrame = !pause;
       if (pause) return;
@@ -353,6 +376,10 @@ export async function createMilkdrop({ stage, engine, settings, onPresetChange, 
       if (name !== order[index]) edits.delete(name);
     },
     // While the editor is open, the preset does not change by itself.
+    // For tests and the debug view: whether the picture stands still because the music stopped.
+    get pausedForMusic() {
+      return stoppedSince !== null;
+    },
     holdAutoAdvance(hold) {
       holdAutoAdvance = hold;
       lastChange = performance.now();

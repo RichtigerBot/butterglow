@@ -97,7 +97,7 @@ async function activate(index, { durationMs } = {}) {
     const { id, create, settingsSchema = [] } = visualizers[index];
     if (!instances.has(index)) {
       const settings = settingsPanel.settingsFor(id, settingsSchema);
-      instances.set(index, await create({ stage, engine, settings, library, customPresets, onPresetChange: updateHud }));
+      instances.set(index, await create({ stage, engine, settings, library, customPresets, onPresetChange: updateHud, musicStopped }));
     }
     const previous = active;
     const previousIndex = activeIndex;
@@ -136,6 +136,14 @@ let waterPaused = false;
 function setWaterFade(hidden) {
   const canvas = document.getElementById('water');
   if (canvas) canvas.style.opacity = hidden ? '0' : '';
+}
+
+// Whether the music in the tab is paused or stopped, as the media player last reported it. Unknown (player off in
+// the settings, no answer from the page) counts as playing. While a preset is edited, the picture never stops.
+function musicStopped() {
+  const state = player?.state;
+  if (presetEditor?.open || !state || state.unavailable || !settingsPanel?.settingsFor('player', playerSettings).enabled) return false;
+  return state.playing === false;
 }
 
 function renderFrame(now) {

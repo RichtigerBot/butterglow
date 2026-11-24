@@ -131,6 +131,34 @@ try {
   const position = await music.evaluate(() => audio.currentTime);
   check('Progress bar seeks in the tab', Math.abs(position - 30) < 2, `${position.toFixed(1)} s`);
 
+  // "When the music stops": the Milkdrop picture stands still while the tab is paused, and goes on afterwards.
+  const whenStopped = (value) =>
+    page.evaluate((choice) => {
+      const select = document.querySelector('#hud-active-settings [data-setting="milkdrop.whenStopped"] select');
+      select.value = choice;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return Boolean(select);
+    }, value);
+  const stillness = async () => {
+    await sleep(2500); // the player asks the tab once per second
+    return page.evaluate(() => app.active.pausedForMusic);
+  };
+  const hasSetting = await whenStopped('pause');
+  await music.evaluate(() => audio.pause());
+  const pausedPicture = await stillness();
+  await music.evaluate(() => audio.play());
+  const runningAgain = await stillness();
+  await whenStopped('continue');
+  await music.evaluate(() => audio.pause());
+  const keptRunning = await stillness();
+  await music.evaluate(() => audio.play());
+  await sleep(1200);
+  check(
+    '"When the music stops: pause" stops the Milkdrop picture while the tab is paused; "keep running" does not',
+    hasSetting && pausedPicture === true && runningAgain === false && keptRunning === false,
+    JSON.stringify({ hasSetting, pausedPicture, runningAgain, keptRunning }),
+  );
+
   // Position: bottom centre by default, changeable in the menu and saved.
   const box = () =>
     page.$eval('#player', (player) => {
