@@ -29,7 +29,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "package": "npm run build && node scripts/package.mjs",
-    "test": "npm run build && node --test test/quality.test.mjs test/beat-detector.test.mjs test/section-detector.test.mjs test/auto-switch.test.mjs test/water-surface.test.mjs test/water-waves.test.mjs test/preset-library.test.mjs test/preset-model.test.mjs test/milk-format.test.mjs test/crossfade.test.mjs test/i18n.test.mjs test/silence-watch.test.mjs && node test/smoke-test.mjs && node test/player-test.mjs",
+    "test": "npm run build && node --test test/quality.test.mjs test/beat-detector.test.mjs test/section-detector.test.mjs test/auto-switch.test.mjs test/water-surface.test.mjs test/water-waves.test.mjs test/preset-library.test.mjs test/preset-model.test.mjs test/milk-format.test.mjs test/crossfade.test.mjs test/i18n.test.mjs test/silence-watch.test.mjs test/backup.test.mjs && node test/smoke-test.mjs && node test/player-test.mjs",
     "previews": "npm run build && node scripts/make-previews.mjs && npm run build"
   },
   "dependencies": {

@@ -126,6 +126,41 @@ body.idle #hud:not(.pinned) {
   background: rgb(255 255 255 / 12%);
 }
 
+.setting-backup {
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.setting-backup-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.setting-button {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  background: rgb(255 255 255 / 12%);
+  cursor: pointer;
+}
+
+.setting-button:hover {
+  background: rgb(255 255 255 / 20%);
+}
+
+.setting-button.danger {
+  background: rgb(220 50 70 / 80%);
+}
+
+.setting-backup-message {
+  margin: 6px 0 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
 .setting-custom-wrap {
   grid-column: 2;
   justify-self: end;

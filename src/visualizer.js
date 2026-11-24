@@ -18,6 +18,7 @@ import { createQuality, qualitySettings } from './ui/quality.js';
 import { createSettingsPanel } from './ui/settings-panel.js';
 import { renderPresetPreviews, setMilkdropMeasuring } from './visualizers/milkdrop.js';
 import { visualizers } from './visualizers/index.js';
+import { backupFileName, createBackup, parseBackup, restoreBackup } from './backup/backup.js';
 import { loadLanguage, onLanguageChange, t, translateDom } from './i18n/i18n.js';
 
 const HUD_IDLE_MS = 3000;
@@ -136,6 +137,54 @@ let waterPaused = false;
 function setWaterFade(hidden) {
   const canvas = document.getElementById('water');
   if (canvas) canvas.style.opacity = hidden ? '0' : '';
+}
+
+// Backup (settings menu): everything in one file, and back. Called from clicks, so the presets folder may ask for
+// access. After reading a backup the page starts again, so every part loads the restored values.
+const RESTORED_KEY = 'butterglowBackupRestored';
+function backupActions() {
+  const store = () => customPresets?.store ?? null;
+  // Access to the presets folder, if the browser has one and it is not granted yet (needs the click).
+  const access = async () => {
+    const current = store();
+    if (current && current.state === 'prompt') await current.connect().catch(() => {});
+    return current;
+  };
+  return {
+    async exportAll() {
+      const backup = await createBackup({ storage: chrome.storage.local, customStore: await access(), extensionVersion: chrome.runtime.getManifest().version });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
+      link.download = backupFileName();
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      const presets = backup.presets.length;
+      return backup.presetsIncluded || store()?.state === 'none' ? () => t('backup.saved', { presets }) : () => t('backup.savedWithoutPresets');
+    },
+    async read(file) {
+      const backup = parseBackup(await file.text());
+      const date = new Date(backup.created);
+      return {
+        summary: () => t('backup.summary', { date: Number.isNaN(date.getTime()) ? '?' : date.toLocaleString(), presets: backup.presets.length }),
+        async apply() {
+          let target = await access();
+          // A browser with folder access, but no folder chosen yet: the presets need one.
+          if (backup.presets.length && target?.state === 'none') await target.connect().catch(() => {});
+          target = store();
+          const result = await restoreBackup(backup, { storage: chrome.storage.local, customStore: target });
+          sessionStorage.setItem(RESTORED_KEY, JSON.stringify(result));
+          location.reload();
+        },
+      };
+    },
+  };
+}
+function reportRestoredBackup() {
+  const stored = sessionStorage.getItem(RESTORED_KEY);
+  if (!stored) return;
+  sessionStorage.removeItem(RESTORED_KEY);
+  const { presets, presetsSkipped } = JSON.parse(stored);
+  showStatus(() => (presetsSkipped ? t('backup.restoredWithoutPresets', { presets, skipped: presetsSkipped }) : t('backup.restored', { presets })), { onClick: () => (status.hidden = true) });
 }
 
 function renderFrame(now) {
@@ -439,7 +488,9 @@ async function start() {
     ],
     onSelectVisualizer: (index) => activate(index),
     onPinChange: wake,
+    backup: backupActions(),
   });
+  reportRestoredBackup();
 
   engine.applySettings(settingsPanel.settingsFor('audio', audioSettings));
   displaySettings = settingsPanel.settingsFor('display', DISPLAY_SCHEMA);

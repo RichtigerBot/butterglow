@@ -1214,6 +1214,81 @@ try {
   await page.keyboard.press('v');
   await page.waitForFunction(() => document.getElementById('hud-title').textContent === 'Neon Ring');
 
+  // Backup: everything in one file, and back into a changed extension. Own page, because reading a backup reloads it.
+  {
+    const bkPage = await browser.newPage();
+    const bkErrors = [];
+    bkPage.on('pageerror', (error) => bkErrors.push(error.message));
+    const cdp = await bkPage.createCDPSession();
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'deny' }); // the file is caught below, nothing lands in Downloads
+    await bkPage.goto(`${baseUrl}?demo=1`);
+    await bkPage.waitForFunction(() => document.getElementById('hud-title').textContent === 'Milkdrop', { timeout: 60000 });
+    const MILK = 'MILKDROP_PRESET_VERSION=201\n[preset00]\nfDecay=0.95\nzoom=1.02\n';
+    await bkPage.evaluate(async (milk) => {
+      await app.customPresets.store.useDirectory(await navigator.storage.getDirectory());
+      await app.customPresets.store.write('own', 'Backup test.milk', milk);
+      await chrome.storage.local.set({ backupProbe: { favorite: 'X' } });
+      window.backupBlobs = [];
+      const original = URL.createObjectURL;
+      URL.createObjectURL = (blob) => {
+        window.backupBlobs.push(blob);
+        return original.call(URL, blob);
+      };
+    }, MILK);
+    const backupButton = (selector) => bkPage.evaluate((css) => document.querySelector(`#hud-shared-settings .setting-backup ${css}`).click(), selector);
+    await backupButton('.setting-backup-buttons button:nth-child(1)');
+    await bkPage.waitForFunction(() => window.backupBlobs.length > 0, { timeout: 10000 }).catch(() => {});
+    await sleep(300);
+    const exported = await bkPage.evaluate(async () => ({
+      text: await window.backupBlobs.at(-1)?.text(),
+      message: document.querySelector('.setting-backup-message').textContent,
+    }));
+    const file = JSON.parse(exported.text ?? '{}');
+    check(
+      'Backup saves the storage and the own presets in one file',
+      file.kind === 'butterglow-backup' && file.storage?.backupProbe?.favorite === 'X' && 'hud' in file.storage && file.presets.some((preset) => preset.fileName === 'Backup test.milk') && /Backup saved/.test(exported.message),
+      exported.message,
+    );
+    // Change things after the backup: a key goes, one comes, the preset is deleted.
+    await bkPage.evaluate(async () => {
+      await chrome.storage.local.remove('backupProbe');
+      await chrome.storage.local.set({ afterBackup: 1 });
+      await (await (await navigator.storage.getDirectory()).getDirectoryHandle('own')).removeEntry('Backup test.milk');
+    });
+    const backupPath = resolve('test-output/backup.json');
+    writeFileSync(backupPath, exported.text ?? '');
+    const broken = resolve('test-output/backup-broken.json');
+    writeFileSync(broken, '{"kind":"butterglow-backup","version":1,"storage":[]}');
+    const input = await bkPage.$('#hud-shared-settings .setting-backup input[type="file"]');
+    await input.uploadFile(broken);
+    await sleep(500);
+    const refused = await bkPage.evaluate(async () => ({ message: document.querySelector('.setting-backup-message').textContent, still: (await chrome.storage.local.get('afterBackup')).afterBackup }));
+    check('A broken backup is refused and changes nothing', /damaged/.test(refused.message) && refused.still === 1, JSON.stringify(refused));
+    await (await bkPage.$('#hud-shared-settings .setting-backup input[type="file"]')).uploadFile(backupPath);
+    await sleep(500);
+    const summary = await bkPage.$eval('.setting-backup-message', (element) => element.textContent);
+    await Promise.all([bkPage.waitForNavigation({ timeout: 30000 }), backupButton('.danger')]);
+    await bkPage.waitForFunction(() => document.getElementById('hud-title').textContent === 'Milkdrop', { timeout: 60000 });
+    await sleep(500);
+    const restored = await bkPage.evaluate(async () => {
+      const own = await (await navigator.storage.getDirectory()).getDirectoryHandle('own');
+      const preset = await own.getFileHandle('Backup test.milk').then(() => true, () => false);
+      const { backupProbe, afterBackup } = await chrome.storage.local.get(['backupProbe', 'afterBackup']);
+      return { probe: backupProbe?.favorite, afterBackup: afterBackup ?? null, preset, status: document.getElementById('status').textContent };
+    });
+    check(
+      'Reading the backup shows what is in it, then brings everything back exactly',
+      summary.includes(`with ${file.presets.length} own presets`) && restored.probe === 'X' && restored.afterBackup === null && restored.preset && /Backup read/.test(restored.status),
+      JSON.stringify({ summary, restored }),
+    );
+    check('No errors with the backup', bkErrors.length === 0, bkErrors.slice(0, 3).join(' | '));
+    await bkPage.evaluate(async () => {
+      await chrome.storage.local.remove('backupProbe');
+      await (await (await navigator.storage.getDirectory()).getDirectoryHandle('own')).removeEntry('Backup test.milk');
+    });
+    await bkPage.close();
+  }
+
   // 4K, also with OS scaling: the image must fill the whole canvas.
   for (const [width, height, scale] of [[3840, 2160, 1], [2560, 1440, 1.5], [1920, 1080, 2]]) {
     const sizePage = await browser.newPage();

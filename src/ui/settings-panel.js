@@ -107,7 +107,8 @@ function createControl(field, value, onChange) {
   return row;
 }
 
-export async function createSettingsPanel({ hud, visualizers, sections, onSelectVisualizer, onPinChange }) {
+// `backup`: { exportAll(), read(file) → { summary, apply() } } for the backup section; optional.
+export async function createSettingsPanel({ hud, visualizers, sections, onSelectVisualizer, onPinChange, backup = null }) {
   const menu = hud.querySelector('#hud-menu');
   const menuToggle = hud.querySelector('#hud-menu-toggle');
   const pinButton = hud.querySelector('#hud-pin');
@@ -203,6 +204,75 @@ export async function createSettingsPanel({ hud, visualizers, sections, onSelect
     return row;
   }
 
+  // Backup: one file with everything. Reading one first shows what is in it; replacing needs a second click.
+  let backupMessage = null; // function, so it follows a language switch
+  let pendingRestore = null; // { summary, apply } after a file was chosen
+  function renderBackup() {
+    const box = document.createElement('div');
+    box.className = 'setting-backup';
+    const buttons = document.createElement('div');
+    buttons.className = 'setting-backup-buttons';
+    const message = document.createElement('p');
+    message.className = 'setting-backup-message';
+    message.textContent = backupMessage?.() ?? t('backup.help');
+    const show = (next) => {
+      backupMessage = next;
+      renderAll();
+    };
+    const fileInput = Object.assign(document.createElement('input'), { type: 'file', accept: '.json,application/json', hidden: true });
+    const action = (label, onClick, className = 'setting-button') => {
+      const element = Object.assign(document.createElement('button'), { type: 'button', className, textContent: label });
+      element.addEventListener('click', onClick);
+      return element;
+    };
+    if (pendingRestore) {
+      message.textContent = pendingRestore.summary();
+      buttons.append(
+        action(t('backup.replace'), async () => {
+          const { apply } = pendingRestore;
+          pendingRestore = null;
+          show(() => t('backup.restoring'));
+          try {
+            await apply();
+          } catch (error) {
+            show(() => t('backup.failed', { error: error.message }));
+          }
+        }, 'setting-button danger'),
+        action(t('browser.cancel'), () => {
+          pendingRestore = null;
+          show(null);
+        }),
+      );
+    } else {
+      buttons.append(
+        action(t('backup.export'), async () => {
+          // Nothing of the menu still waiting: write the current state before reading the storage.
+          clearTimeout(saveTimer);
+          await chrome.storage.local.set({ [STORAGE_KEY]: { ...state, values } });
+          try {
+            show(await backup.exportAll());
+          } catch (error) {
+            show(() => t('backup.failed', { error: error.message }));
+          }
+        }),
+        action(t('backup.import'), () => fileInput.click()),
+      );
+    }
+    fileInput.addEventListener('change', async () => {
+      const [file] = fileInput.files;
+      if (!file) return;
+      try {
+        pendingRestore = await backup.read(file);
+        show(null);
+      } catch (error) {
+        const known = ['not-json', 'not-backup', 'too-new', 'broken'].includes(error.message);
+        show(() => (known ? t(`backup.error.${error.message}`) : t('backup.failed', { error: error.message })));
+      }
+    });
+    box.append(buttons, message, fileInput);
+    return box;
+  }
+
   let shownIndex = null;
   function renderAll() {
     const selected = visualizerSelect.value;
@@ -218,6 +288,11 @@ export async function createSettingsPanel({ hud, visualizers, sections, onSelect
     const heading = document.createElement('h3');
     heading.textContent = t('settings.languageHeading');
     sharedSections.append(heading, renderLanguage());
+    if (backup) {
+      const backupHeading = document.createElement('h3');
+      backupHeading.textContent = t('backup.heading');
+      sharedSections.append(backupHeading, renderBackup());
+    }
     if (shownIndex !== null) showVisualizer(shownIndex);
     applyState();
   }
