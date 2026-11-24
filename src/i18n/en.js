@@ -510,6 +510,7 @@ export default {
     decodeFailed: 'The file could not be read: {error}',
     recording: 'Recording from the start: let the song play to the end, or stop. You can close the editor meanwhile (T opens it again).',
     recorded: 'Recording finished and saved.',
+    recordSongChanged: 'Another song started in the tab: the recording was stopped. Turn on Repeat to stay with one song.',
     saveFailed: 'Could not save: {error}',
     needPlayhead: 'Play the song in the tab first; the beat is placed where it is playing.',
     imported: '{count} visconfs imported.',

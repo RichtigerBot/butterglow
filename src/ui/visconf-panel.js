@@ -12,7 +12,7 @@ import { createCuePlayer, createSongClock, resolvePreset } from '../visconf/cue-
 import { analyzeSong, createSongRecorder, decodeSong } from '../visconf/song-analysis.js';
 import { addDrop, beatsOf, createTapTempo, removeDrop, removeQuiet, setDownbeat, setTempo } from '../visconf/song-markers.js';
 import { LAYOUT, applyDrag, followView, formatTime, fullView, hitTest, insertCue, scrollView, snapTime, timeToX, xToTime, zoomView } from '../visconf/timeline-geometry.js';
-import { ALL_PRESETS, FILE_NAME, createVisconf, cueAt, cuesFromMarkers, followMarkers, fromFile, removeCue, sameSong, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
+import { ALL_PRESETS, FILE_NAME, createVisconf, cueAt, cuesFromMarkers, followMarkers, fromFile, removeCue, sameSong, songKey, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
 import { createVisconfStore } from '../visconf/visconf-store.js';
 
 const SOFT_BLEND_SECONDS = 3;
@@ -90,7 +90,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
   let held = null; // the Milkdrop instance whose own changes rest during playback
   let fired = null; // { cue, preset, at } of the last change the plan made
   let liveText = '';
-  let followedTitle = null; // the tab song the editor last followed on its own
+  let lastTabKey = null; // songKey of the song the tab played at the last frame
   const cuePlayer = createCuePlayer({
     resolvePreset: (cue) => {
       const milkdrop = getMilkdrop();
@@ -1148,11 +1148,20 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
         }
       }
 
-      // With the editor closed, it follows the song in the tab, so its plan applies whenever that song plays.
+      // The editor follows the song in the tab, so timeline and plan always belong to what plays (a playlist or
+      // YouTube moving on to the next song). Open, it only follows a change in the tab: a file loaded for another
+      // song stays until the tab moves on. "Repeat" keeps the song, and with it the editor, where it is.
       const current = tabSong();
-      if (!open && current && current.title !== followedTitle && !sameSong(current, song)) {
-        followedTitle = current.title;
-        loadSong(current);
+      const tabKey = current ? songKey(current) : null;
+      if (current && tabKey !== lastTabKey) {
+        const previous = lastTabKey;
+        lastTabKey = tabKey;
+        if (!sameSong(current, song) && (!open || previous !== null || !song.title)) {
+          const wasRecording = Boolean(recorder);
+          loadSong(current).then(() => {
+            if (wasRecording) setStatus(() => t('visconf.recordSongChanged'));
+          });
+        }
       }
 
       if (!open) return;

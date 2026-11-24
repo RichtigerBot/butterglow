@@ -510,6 +510,7 @@ export default {
     decodeFailed: 'Die Datei ließ sich nicht lesen: {error}',
     recording: 'Aufnahme von vorne läuft: Lass das Lied bis zum Ende laufen oder stoppe. Den Editor kannst du solange schließen (T öffnet ihn wieder).',
     recorded: 'Aufnahme beendet und gespeichert.',
+    recordSongChanged: 'Im Tab lief ein anderes Lied an: Die Aufnahme wurde abgebrochen. Mit „Wiederholen“ bleibt es bei einem Lied.',
     saveFailed: 'Speichern fehlgeschlagen: {error}',
     needPlayhead: 'Spiel das Lied zuerst im Tab ab; der Beat landet dort, wo es gerade läuft.',
     imported: '{count} Visconfs importiert.',

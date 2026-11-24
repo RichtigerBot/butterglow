@@ -149,6 +149,13 @@ try {
   const repeated = await music.evaluate(() => ({ position: audio.currentTime, playing: !audio.paused }));
   check('Repeat starts the song again at its end', repeated.playing && repeated.position < 6, JSON.stringify(repeated));
   await page.click('#visconf .vc-repeat input');
+  // The open editor follows when the tab moves on to another song.
+  const songBefore = await page.evaluate(() => app.visconfPanel.state.song.title);
+  await music.evaluate(() => (navigator.mediaSession.metadata = new MediaMetadata({ title: 'Second song', artist: 'Test band' })));
+  await page.waitForFunction(() => app.visconfPanel.state.song.title === 'Second song', { timeout: 8000 }).catch(() => {});
+  const songAfter = await page.evaluate(() => ({ title: app.visconfPanel.state.song.title, field: document.querySelector('#visconf .vc-title').value }));
+  check('The open editor switches to the next song in the tab', songBefore === 'Test song' && songAfter.title === 'Second song' && songAfter.field === 'Second song', JSON.stringify({ songBefore, songAfter }));
+  await music.evaluate(() => (navigator.mediaSession.metadata = new MediaMetadata({ title: 'Test song', artist: 'Test band', artwork: [{ src: '/cover.png' }] })));
   await page.keyboard.press('Escape');
   await page.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers', 'visconfRepeat']));
 
