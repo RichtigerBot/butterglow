@@ -20,6 +20,8 @@ const SAVE_DELAY_MS = 400;
 const DOUBLE_CLICK_MS = 350;
 const DRAG_START_PX = 3;
 const HISTORY_LIMIT = 100;
+const FIRED_SHOW_MS = 3000; // how long the live line and the timeline show a change that just happened
+const APPLY_KEY = 'visconfApply';
 const COLORS = {
   background: 'rgb(255 255 255 / 4%)',
   wave: 'rgb(170 160 255 / 70%)',
@@ -52,6 +54,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   const inspector = $('.vc-inspector');
   const fileInput = $('.vc-file');
   const importInput = $('.vc-import-file');
+  const liveLine = $('.vc-live');
 
   let open = false;
   let song = songOf({});
@@ -79,6 +82,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   let lastPlayerState = null;
   let playing = false; // playback of the plan is running
   let held = null; // the Milkdrop instance whose own changes rest during playback
+  let fired = null; // { cue, preset, at } of the last change the plan made
+  let liveText = '';
+  let followedTitle = null; // the tab song the editor last followed on its own
   const cuePlayer = createCuePlayer({
     resolvePreset: (cue) => {
       const milkdrop = getMilkdrop();
@@ -430,6 +436,34 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
       context.fillText(formatTime(time).replace(/\.0$/, ''), x(time) + 3, ruler.top + 10);
     }
 
+    // The section that plays right now, and a flash where the plan just changed the preset.
+    const active = playing ? cuePlayer.active : null;
+    if (active) {
+      const end = visconf.cues.find((cue) => cue.time > active.time)?.time ?? duration;
+      context.strokeStyle = COLORS.selected;
+      context.lineWidth = 1;
+      context.strokeRect(x(active.time) + 0.5, cueLane.top + 0.5, x(end) - x(active.time) - 1, cueLane.bottom - cueLane.top - 1);
+    }
+    if (fired && performance.now() - fired.at < FIRED_SHOW_MS) {
+      const fade = 1 - (performance.now() - fired.at) / FIRED_SHOW_MS;
+      context.fillStyle = `rgb(255 255 255 / ${Math.round(fade * 60)}%)`;
+      context.fillRect(Math.round(x(fired.cue.time)) - 3, wave.top, 6, cueLane.bottom - wave.top);
+      dirty = true; // keep fading
+    }
+
+    // What the two lanes are.
+    context.font = '10px system-ui, sans-serif';
+    for (const [label, top] of [
+      [t('visconf.laneMarkers'), wave.top],
+      [t('visconf.laneCues'), cueLane.top],
+    ]) {
+      const labelWidth = context.measureText(label).width + 8;
+      context.fillStyle = 'rgb(0 0 0 / 55%)';
+      context.fillRect(width - labelWidth - 2, top + 2, labelWidth, 13);
+      context.fillStyle = COLORS.text;
+      context.fillText(label, width - labelWidth + 2, top + 12);
+    }
+
     // Playhead.
     if (position !== null) {
       context.fillStyle = COLORS.playhead;
@@ -566,7 +600,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     else if (hit?.kind?.startsWith('quiet')) lines.push(t('visconf.tipQuiet'));
     else if (hit?.kind === 'ruler' && markers?.grid?.bpm) lines.push(t('visconf.tipRuler'));
     const cue = visconf ? cueAt(visconf, time) : null;
-    if (cue) lines.push(`${cue.transition === 'soft' ? '≈' : '|'} ${cue.label || presetText(cue)}`);
+    if (cue) lines.push(t('visconf.tipSection', { preset: `${cue.label ? `${cue.label}: ` : ''}${presetText(cue)} (${t(cue.transition === 'soft' ? 'visconf.soft' : 'visconf.cut')})` }));
     tooltip.textContent = lines.join(' · ');
     tooltip.hidden = false;
     tooltip.style.left = `${Math.min(x + 12, width - tooltip.offsetWidth - 4)}px`;
@@ -756,8 +790,15 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   recordButton.addEventListener('click', () => (recorder ? stopRecording() : startRecording()));
   playToggle.addEventListener('change', () => {
     if (!playToggle.checked) stopPlayback();
+    globalThis.chrome?.storage?.local?.set({ [APPLY_KEY]: playToggle.checked }).catch?.(() => {});
     changed();
   });
+  globalThis.chrome?.storage?.local
+    ?.get(APPLY_KEY)
+    .then((stored) => {
+      if (stored?.[APPLY_KEY] === false) playToggle.checked = false;
+    })
+    .catch?.(() => {});
 
   select.addEventListener('change', () => {
     visconf = visconfs.find((entry) => entry.id === select.value) ?? null;
@@ -928,6 +969,31 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     cuePlayer.load(visconf);
   }
 
+  // One line that says whether the plan is running, and if not, why.
+  function renderLive(position, nowMs) {
+    const current = tabSong();
+    let message;
+    let running = false;
+    if (!visconf) message = t('visconf.liveNoPlan');
+    else if (!playToggle.checked) message = t('visconf.liveOff');
+    else if (visconf.cues.length === 0) message = t('visconf.liveNoCues');
+    else if (!current) message = t('visconf.liveNoTab');
+    else if (position === null) message = t('visconf.liveOtherSong', { title: current.title });
+    else if (!clock.playing) message = t('visconf.livePaused');
+    else if (!getMilkdrop()) message = t('visconf.liveNoMilkdrop');
+    else {
+      running = true;
+      const next = cuePlayer.upcoming(position);
+      if (fired && nowMs - fired.at < FIRED_SHOW_MS) message = t('visconf.liveFired', { time: formatTime(fired.cue.time), preset: fired.preset });
+      else message = next ? t('visconf.liveNext', { seconds: Math.ceil(next.inSeconds) }) : t('visconf.liveLast');
+    }
+    if (message === liveText) return;
+    liveText = message;
+    liveLine.textContent = message;
+    liveLine.title = message;
+    liveLine.classList.toggle('is-running', running);
+  }
+
   const api = {
     get open() {
       return open;
@@ -988,10 +1054,22 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
       }
       if (playing) {
         const event = cuePlayer.update(position);
-        if (event?.preset) getMilkdrop()?.selectPreset(event.preset, { blendSeconds: event.transition === 'soft' ? SOFT_BLEND_SECONDS : 0 });
+        if (event?.preset) {
+          getMilkdrop()?.selectPreset(event.preset, { blendSeconds: event.transition === 'soft' ? SOFT_BLEND_SECONDS : 0 });
+          fired = { cue: event.cue, preset: event.preset, at: nowMs };
+          dirty = true;
+        }
+      }
+
+      // With the editor closed, it follows the song in the tab, so its plan applies whenever that song plays.
+      const current = tabSong();
+      if (!open && current && current.title !== followedTitle && !sameSong(current, song)) {
+        followedTitle = current.title;
+        loadSong(current);
       }
 
       if (!open) return;
+      renderLive(position, nowMs);
       if (position !== null && duration && !drag) {
         const followed = followView(view, duration, position);
         if (followed !== view) {
@@ -1012,7 +1090,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
 
     // For the smoke test and DevTools.
     get state() {
-      return { song, duration, analysis, markers, visconf, visconfs, view, selected, recording: Boolean(recorder) };
+      return { song, duration, analysis, markers, visconf, visconfs, view, selected, recording: Boolean(recorder), live: liveText };
     },
     loadSong,
     useAnalysis,

@@ -1227,6 +1227,7 @@ try {
     await vcPage.mouse.move(700, 200);
     await vcPage.keyboard.press('t');
     await vcPage.waitForFunction(() => !document.getElementById('visconf').hidden && app.visconfPanel.state.song.title === 'Demo-Beat', { timeout: 5000 }).catch(() => {});
+    check('The plan applies by default', await vcPage.$eval('#visconf .vc-play input', (input) => input.checked));
     check('T opens the visconf editor with the song from the player', await vcPage.evaluate(() => !document.getElementById('visconf').hidden && app.visconfPanel.state.song.title === 'Demo-Beat'));
     await vcPage.evaluate(async () => {
       const peaks = Array.from({ length: 12000 }, (_, i) => 80 + ((i * 37) % 120));
@@ -1340,10 +1341,13 @@ try {
       return name;
     });
     await vcPage.waitForFunction((name) => app.active.presetName === name, { timeout: 8000 }, target).catch(() => {});
-    const playback = await vcPage.evaluate(() => ({ preset: app.active.presetName, playing: app.visconfPanel.playing }));
+    const playback = await vcPage.evaluate(() => ({ preset: app.active.presetName, playing: app.visconfPanel.playing, live: app.visconfPanel.state.live }));
     check('A playing plan switches to the planned preset on time', playback.preset === target && playback.playing, JSON.stringify(playback));
+    check('The live line says that the plan changed the preset', playback.live.includes('Changed at') && playback.live.includes(target), playback.live);
     await vcPage.screenshot({ path: 'test-output/visconf.png' });
     await vcPage.evaluate(() => app.visconfPanel.setPlay(false));
+    await sleep(300);
+    check('The live line says when the plan is off', await vcPage.evaluate(() => app.visconfPanel.state.live === 'Plan is off'));
 
     const pickLanguage = (language) => { const select = document.getElementById('hud-language'); select.value = language; select.dispatchEvent(new Event('change', { bubbles: true })); };
     await vcPage.evaluate(pickLanguage, 'de');

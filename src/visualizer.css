@@ -1971,6 +1971,19 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
   font-variant-numeric: tabular-nums;
 }
 
+#visconf .vc-live {
+  color: rgb(255 255 255 / 75%);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+
+#visconf .vc-live.is-running {
+  color: rgb(120 230 190);
+}
+
 #visconf .vc-status {
   min-height: 1em;
   margin: 0;
