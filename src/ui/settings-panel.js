@@ -121,10 +121,21 @@ export async function createSettingsPanel({ hud, visualizers, sections, onSelect
   const state = { pinned: saved?.pinned === true, expanded: saved?.expanded === true, keys: saved?.keys !== false };
   let saveTimer;
 
+  // Sliders save after a short pause, so dragging does not write on every step.
   function save() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => chrome.storage.local.set({ [STORAGE_KEY]: { ...state, values } }), SAVE_DELAY_MS);
+    saveTimer = setTimeout(saveNow, SAVE_DELAY_MS);
   }
+  // Buttons (key hints, pin, menu) save at once: the page may be closed or the extension restarted right after.
+  function saveNow() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    return chrome.storage.local.set({ [STORAGE_KEY]: { ...state, values } });
+  }
+  // Whatever is still waiting is written when the page goes away.
+  window.addEventListener('pagehide', () => {
+    if (saveTimer) saveNow();
+  });
 
   // Returns an object that visualizers and effects read directly. Changes therefore take effect immediately.
   const live = new Map();
@@ -168,18 +179,18 @@ export async function createSettingsPanel({ hud, visualizers, sections, onSelect
   keysButton.addEventListener('click', () => {
     state.keys = !state.keys;
     applyState();
-    save();
+    saveNow();
   });
 
   menuToggle.addEventListener('click', () => {
     state.expanded = !state.expanded;
     applyState();
-    save();
+    saveNow();
   });
   pinButton.addEventListener('click', () => {
     state.pinned = !state.pinned;
     applyState();
-    save();
+    saveNow();
     onPinChange();
   });
 

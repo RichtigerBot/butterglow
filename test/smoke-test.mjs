@@ -1028,10 +1028,17 @@ try {
   await sleep(500);
   const keysOn = await page.$eval('#hud-keys', (keys) => keys.getBoundingClientRect().height > 20);
   check('Button hides and shows the key hints', keysOff && keysOn, JSON.stringify({ keysOff, keysOn }));
+  // Hidden key hints stay hidden after a restart, even if the page is closed right after the click.
+  await page.click('#hud-keys-toggle');
   await page.reload();
   await page.waitForFunction(() => document.getElementById('hud-title').textContent === 'Milkdrop', { timeout: 30000 });
   hud = await hudState();
   check('Pin and menu survive reloading', hud.menuOpen, JSON.stringify(hud));
+  const keysAfterRestart = await page.evaluate(() => ({ noKeys: document.getElementById('hud').classList.contains('no-keys'), pressed: document.getElementById('hud-keys-toggle').getAttribute('aria-pressed') }));
+  check('Hidden key hints stay hidden after a restart', keysAfterRestart.noKeys && keysAfterRestart.pressed === 'false', JSON.stringify(keysAfterRestart));
+  await page.mouse.move(600, 250);
+  await page.click('#hud-keys-toggle');
+  await sleep(600);
 
   // The setting takes effect and persists, then back to the initial state.
   await page.mouse.move(600, 240);
