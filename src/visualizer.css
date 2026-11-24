@@ -1860,6 +1860,7 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
 }
 
 #visconf header,
+#visconf .vc-transport,
 #visconf .vc-tools,
 #visconf .vc-inspector,
 #visconf .vc-name-form {
@@ -1922,7 +1923,30 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
   width: 140px;
 }
 
+#visconf .vc-clock {
+  min-width: 11ch;
+  color: rgb(255 255 255 / 75%);
+  font-variant-numeric: tabular-nums;
+}
+
+#visconf .vc-record[aria-pressed='true'] {
+  color: #fff;
+  background: rgb(220 50 70 / 85%);
+}
+
+/* While a song is recorded, everything except stop and close is greyed out. */
+#visconf.is-recording .vc-timeline {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+#visconf.is-recording label,
+#visconf label:has(input:disabled) {
+  opacity: 0.45;
+}
+
 #visconf .vc-play,
+#visconf .vc-repeat,
 #visconf .vc-snap {
   display: flex;
   align-items: center;

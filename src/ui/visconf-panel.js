@@ -38,7 +38,7 @@ const COLORS = {
   sections: ['rgb(255 205 90 / 14%)', 'rgb(160 120 255 / 14%)'],
 };
 
-export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, library, getLookahead, getInputPeak, onChange, store = createVisconfStore() }) {
+export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, control, library, getLookahead, getInputPeak, onChange, store = createVisconfStore() }) {
   const $ = (selector) => root.querySelector(selector);
   const canvas = $('.vc-canvas');
   const tooltip = $('.vc-tooltip');
@@ -55,6 +55,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   const fileInput = $('.vc-file');
   const importInput = $('.vc-import-file');
   const liveLine = $('.vc-live');
+  const clockLine = $('.vc-clock');
+  const toggleButton = $('.vc-toggle');
+  const repeatToggle = $('.vc-repeat input');
 
   let open = false;
   let song = songOf({});
@@ -74,6 +77,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   let redoStack = [];
   let analysing = null; // AbortController while a file is analysed
   let recorder = null;
+  let recordWaiting = false; // the song was sent back to the start; recording begins once it is there
+  let repeatDone = false; // the repeat for this end of the song has happened
+  let clockText = '';
   let status = null; // function, so it follows a language switch
   let dirty = true;
   let playheadX = null;
@@ -203,6 +209,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   function renderHistory() {
     $('.vc-undo').disabled = undoStack.length === 0;
     $('.vc-redo').disabled = redoStack.length === 0;
+    applyLock();
   }
   function remember() {
     undoStack.push(snapshot());
@@ -295,6 +302,8 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     }
   }
 
+  // "Record current song": the song in the tab starts from the beginning and plays once while it is analysed.
+  // Everything except stop and close is locked until the end; the editor can be closed meanwhile.
   function startRecording() {
     const current = tabSong();
     if (!current) {
@@ -302,9 +311,15 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
       return;
     }
     const begin = async () => {
+      const state = getPlayerState();
+      const canSeek = Boolean(state?.canSeek);
       recorder = createSongRecorder();
-      renderTools();
-      setStatus(() => t('visconf.recording'));
+      recordWaiting = canSeek && state.position > 1;
+      repeatDone = false;
+      renderAll();
+      setStatus(() => t(canSeek ? 'visconf.recording' : 'visconf.noSeekRecord'));
+      if (canSeek) await seek(0);
+      await control?.play?.();
     };
     if (!sameSong(current, song)) loadSong(current).then(begin);
     else begin();
@@ -314,7 +329,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     if (!recorder) return;
     const finished = recorder;
     recorder = null;
-    renderTools();
+    recordWaiting = false;
+    unlock();
+    renderAll();
     if (!keep) return;
     const state = getPlayerState();
     const length = state?.duration || clock.position(performance.now() / 1000);
@@ -495,7 +512,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
   const hitAt = ({ x, y, width }) => hitTest({ markers, visconf, view, width, x, y });
 
   canvas.addEventListener('pointerdown', (event) => {
-    if (!duration || event.button !== 0) return;
+    if (!duration || event.button !== 0 || recorder) return;
     const point = pointerTime(event);
     const hit = hitAt(point);
     if (!hit) return;
@@ -609,6 +626,45 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
 
   // --- Toolbar, selection and inspector ---
 
+  // While recording, everything except stop and close is disabled. Called at the end of every render function,
+  // so nothing they enable slips through; after the recording they set the real states again (renderAll).
+  function applyLock() {
+    const locked = Boolean(recorder);
+    root.classList.toggle('is-recording', locked);
+    if (!locked) return;
+    for (const element of root.querySelectorAll('button, input, select')) {
+      if (element === recordButton || element.classList.contains('vc-close') || element.disabled) continue;
+      element.disabled = true;
+      element.dataset.locked = '';
+    }
+  }
+  function unlock() {
+    for (const element of root.querySelectorAll('[data-locked]')) {
+      element.disabled = false;
+      delete element.dataset.locked;
+    }
+  }
+  function renderAll() {
+    renderSelect();
+    renderTools();
+    renderInspector();
+    renderHistory();
+    renderTransport();
+    changed();
+  }
+  function renderTransport() {
+    const state = getPlayerState();
+    const hasTab = Boolean(tabSong());
+    const canSeek = hasTab && Boolean(state?.canSeek);
+    toggleButton.disabled = !hasTab;
+    for (const selector of ['.vc-to-start', '.vc-back', '.vc-forward']) $(selector).disabled = !canSeek;
+    repeatToggle.disabled = !canSeek;
+    recordButton.disabled = !recorder && !hasTab;
+    const label = clock.playing ? '⏸' : '▶';
+    if (toggleButton.textContent !== label) toggleButton.textContent = label;
+    applyLock();
+  }
+
   function renderSelect() {
     select.replaceChildren(
       ...visconfs.map((entry) => {
@@ -623,6 +679,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     $('.vc-rename').disabled = !visconf;
     $('.vc-delete').disabled = !visconf;
     $('.vc-new').disabled = !song.title;
+    applyLock();
   }
 
   function renderTools() {
@@ -634,10 +691,15 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     recordButton.setAttribute('aria-pressed', String(Boolean(recorder)));
     recordButton.textContent = t(recorder ? 'visconf.stopRecording' : 'visconf.record');
     $('.vc-export').disabled = visconfs.length === 0 && !markers;
+    applyLock();
   }
 
   // The inspector shows what is selected: a cue with its preset choice, or a marker with a delete button.
   function renderInspector() {
+    renderInspectorParts();
+    applyLock();
+  }
+  function renderInspectorParts() {
     inspector.replaceChildren();
     const cue = selected?.kind === 'cue' ? visconf?.cues.find((entry) => entry.id === selected.id) : null;
     if (selected && !cue && !(markers && (selected.kind === 'drop' ? markers.drops : markers.quiet).some((entry) => entry.id === selected.id))) selected = null;
@@ -788,6 +850,24 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     input.addEventListener('change', () => loadSong({ title: titleInput.value, artist: artistInput.value, duration: song.duration }));
   }
   recordButton.addEventListener('click', () => (recorder ? stopRecording() : startRecording()));
+  const tabPosition = () => clock.position(performance.now() / 1000);
+  const seekTo = (seconds) => {
+    const length = getPlayerState()?.duration;
+    if (length > 0) seek(Math.max(0, Math.min(1, seconds / length)));
+  };
+  $('.vc-to-start').addEventListener('click', () => seekTo(0));
+  $('.vc-back').addEventListener('click', () => seekTo(tabPosition() - 5));
+  $('.vc-forward').addEventListener('click', () => seekTo(tabPosition() + 5));
+  toggleButton.addEventListener('click', () => control?.toggle?.());
+  repeatToggle.addEventListener('change', () => {
+    globalThis.chrome?.storage?.local?.set({ visconfRepeat: repeatToggle.checked }).catch?.(() => {});
+  });
+  globalThis.chrome?.storage?.local
+    ?.get('visconfRepeat')
+    .then((stored) => {
+      if (stored?.visconfRepeat === true) repeatToggle.checked = true;
+    })
+    .catch?.(() => {});
   playToggle.addEventListener('change', () => {
     if (!playToggle.checked) stopPlayback();
     globalThis.chrome?.storage?.local?.set({ [APPLY_KEY]: playToggle.checked }).catch?.(() => {});
@@ -924,7 +1004,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
 
   const typing = (target) => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
   window.addEventListener('keydown', (event) => {
-    if (!open || typing(event.target) || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+    if (!open || recorder || typing(event.target) || !(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     const wantsUndo = key === 'z' && !event.shiftKey;
     const wantsRedo = key === 'y' || (key === 'z' && event.shiftKey);
@@ -935,7 +1015,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     setStatus(() => t(done ? (wantsUndo ? 'visconf.undone' : 'visconf.redone') : wantsUndo ? 'visconf.nothingToUndo' : 'visconf.nothingToRedo'));
   });
   window.addEventListener('keydown', (event) => {
-    if (!open || !selected || !['Delete', 'Backspace'].includes(event.key)) return;
+    if (!open || recorder || !selected || !['Delete', 'Backspace'].includes(event.key)) return;
     if (typing(event.target)) return;
     event.preventDefault();
     if (selected.kind === 'cue') update({ visconf: removeCue(visconf, selected.id) });
@@ -1013,11 +1093,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
         const current = tabSong();
         if (current) await loadSong(current);
       }
-      renderSelect();
-      renderTools();
-      renderInspector();
-      changed();
+      renderAll();
     },
+    // Only hides the editor: a running recording, the plan and the repeat go on.
     close() {
       open = false;
       root.hidden = true;
@@ -1037,11 +1115,20 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
       }
       const position = playheadTime(now);
 
-      if (recorder && position !== null && clock.playing) {
+      // The end of the song: what is heard reached the end, or the tab stopped at its end.
+      const length = state?.duration || 0;
+      const atEnd = length > 0 && position !== null && (position >= length - 0.5 || (!clock.playing && clock.position(now) >= length - 1));
+      if (recordWaiting && state && state.position <= 1) recordWaiting = false;
+      if (recorder && !recordWaiting && position !== null && clock.playing) {
         recorder.frame(position, { peak: getInputPeak(), section: frame.section.name, bpm: frame.beat.bpm, kick: frame.beat.kick.hit });
         if (frame.section.drop) recorder.drop(position, frame.section.dropStrength ?? 1);
-        if (state?.duration && position >= state.duration - 0.5) stopRecording();
       }
+      if (recorder && !recordWaiting && atEnd) stopRecording();
+      if (atEnd && repeatToggle.checked && !repeatDone && !recorder && state?.canSeek) {
+        repeatDone = true;
+        seek(0).then(() => control?.play?.());
+      }
+      if (position !== null && length > 0 && position < length - 2) repeatDone = false;
 
       const shouldPlay = playToggle.checked && visconf && position !== null && clock.playing;
       if (shouldPlay && !playing) playing = true;
@@ -1070,6 +1157,13 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
 
       if (!open) return;
       renderLive(position, nowMs);
+      const heard = position ?? 0;
+      const text = `${formatTime(heard)} / ${formatTime(length || duration)}`;
+      if (text !== clockText) {
+        clockText = text;
+        clockLine.textContent = text;
+        renderTransport();
+      }
       if (position !== null && duration && !drag) {
         const followed = followView(view, duration, position);
         if (followed !== view) {
@@ -1089,6 +1183,9 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, li
     },
 
     // For the smoke test and DevTools.
+    get recording() {
+      return Boolean(recorder);
+    },
     get state() {
       return { song, duration, analysis, markers, visconf, visconfs, view, selected, recording: Boolean(recorder), live: liveText };
     },

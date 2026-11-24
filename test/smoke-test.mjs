@@ -1349,6 +1349,45 @@ try {
     await sleep(300);
     check('The live line says when the plan is off', await vcPage.evaluate(() => app.visconfPanel.state.live === 'Plan is off'));
 
+    // Media controls and "Record current song": everything else is locked, closing only hides the editor.
+    const transport = await vcPage.evaluate(() => ({
+      toggle: !document.querySelector('#visconf .vc-toggle').disabled,
+      back: document.querySelector('#visconf .vc-back').disabled, // the demo beat cannot seek
+      clock: document.querySelector('#visconf .vc-clock').textContent,
+    }));
+    check('The editor has media controls with the song time', transport.toggle && transport.back && / \/ /.test(transport.clock), JSON.stringify(transport));
+    await vcPage.click('#visconf .vc-record');
+    await sleep(500);
+    const locked = await vcPage.evaluate(() => ({
+      recording: app.visconfPanel.recording,
+      load: document.querySelector('#visconf .vc-load').disabled,
+      title: document.querySelector('#visconf .vc-title').disabled,
+      apply: document.querySelector('#visconf .vc-play input').disabled,
+      stop: !document.querySelector('#visconf .vc-record').disabled && document.querySelector('#visconf .vc-record').textContent.includes('Stop'),
+      close: !document.querySelector('#visconf .vc-close').disabled,
+      greyed: document.getElementById('visconf').classList.contains('is-recording'),
+    }));
+    check('Recording the current song locks everything except stop and close', Object.values(locked).every(Boolean), JSON.stringify(locked));
+    await vcPage.click('#visconf .vc-close');
+    await sleep(1500);
+    const hidden = await vcPage.evaluate(() => ({ hidden: document.getElementById('visconf').hidden, recording: app.visconfPanel.recording }));
+    await vcPage.keyboard.press('t');
+    await sleep(300);
+    await vcPage.click('#visconf .vc-record');
+    await sleep(500);
+    const unlocked = await vcPage.evaluate(() => ({
+      recording: app.visconfPanel.recording,
+      load: document.querySelector('#visconf .vc-load').disabled,
+      title: document.querySelector('#visconf .vc-title').disabled,
+      greyed: document.getElementById('visconf').classList.contains('is-recording'),
+      source: app.visconfPanel.state.analysis?.source,
+    }));
+    check(
+      'Closing only hides the editor; the recording goes on until stop, then everything is free again',
+      hidden.hidden && hidden.recording && !unlocked.recording && !unlocked.load && !unlocked.title && !unlocked.greyed && unlocked.source === 'live',
+      JSON.stringify({ hidden, unlocked }),
+    );
+
     const pickLanguage = (language) => { const select = document.getElementById('hud-language'); select.value = language; select.dispatchEvent(new Event('change', { bubbles: true })); };
     await vcPage.evaluate(pickLanguage, 'de');
     await vcPage.waitForFunction(() => document.querySelector('#visconf .vc-load').textContent === 'Datei laden', { timeout: 5000 }).catch(() => {});

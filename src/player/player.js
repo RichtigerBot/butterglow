@@ -58,7 +58,8 @@ export function createDemoController(context) {
       if (command === 'toggle') {
         if (context.state === 'running') await context.suspend();
         else await context.resume();
-      }
+      } else if (command === 'play') await context.resume();
+      else if (command === 'pause') await context.suspend();
       return {
         title: 'Demo-Beat',
         artist: 'ButterGlow',
@@ -187,6 +188,8 @@ export function createPlayer({ root, controller, settings }) {
       return pinned;
     },
     toggle: () => send('toggle'),
+    play: () => send('play'),
+    pause: () => send('pause'),
     // `fraction` 0 to 1 of the track, like the progress bar.
     seek: (fraction) => send('seek', fraction),
     // Call after a change in the menu.

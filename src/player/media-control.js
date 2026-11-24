@@ -67,6 +67,10 @@ export function mediaControl(command, value) {
       if (media.paused) media.play().catch(() => {});
       else media.pause();
     }
+  } else if ((command === 'play' || command === 'pause') && media) {
+    // Only if needed, so "play" on a playing song changes nothing.
+    if (command === 'play' && media.paused) media.play().catch(() => findButton('toggle')?.click());
+    if (command === 'pause' && !media.paused) media.pause();
   } else if (command === 'next' || command === 'previous') {
     findButton(command)?.click();
   } else if (command === 'seek' && media && Number.isFinite(media.duration) && media.duration > 0) {

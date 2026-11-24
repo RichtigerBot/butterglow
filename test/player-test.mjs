@@ -131,6 +131,27 @@ try {
   const position = await music.evaluate(() => audio.currentTime);
   check('Progress bar seeks in the tab', Math.abs(position - 30) < 2, `${position.toFixed(1)} s`);
 
+  // Visconf editor: "Record current song" starts the song in the tab from the beginning; Repeat starts it again at the end.
+  await page.mouse.move(640, 300);
+  await page.keyboard.press('t');
+  await page.waitForFunction(() => !document.getElementById('visconf').hidden, { timeout: 5000 });
+  await music.evaluate(() => audio.pause());
+  await sleep(1200);
+  await page.click('#visconf .vc-record');
+  await sleep(1500);
+  const recordStart = { tab: await music.evaluate(() => ({ position: audio.currentTime, playing: !audio.paused })), recording: await page.evaluate(() => app.visconfPanel.recording) };
+  check('"Record current song" plays the song in the tab from the start and records', recordStart.recording && recordStart.tab.playing && recordStart.tab.position < 4, JSON.stringify(recordStart));
+  await page.click('#visconf .vc-record');
+  await sleep(300);
+  await page.click('#visconf .vc-repeat input');
+  await music.evaluate(() => (audio.currentTime = 58.5));
+  await music.waitForFunction(() => audio.currentTime < 6 && !audio.paused, { timeout: 10000 }).catch(() => {});
+  const repeated = await music.evaluate(() => ({ position: audio.currentTime, playing: !audio.paused }));
+  check('Repeat starts the song again at its end', repeated.playing && repeated.position < 6, JSON.stringify(repeated));
+  await page.click('#visconf .vc-repeat input');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers', 'visconfRepeat']));
+
   // Position: bottom centre by default, changeable in the menu and saved.
   const box = () =>
     page.$eval('#player', (player) => {

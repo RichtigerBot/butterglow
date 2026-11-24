@@ -480,6 +480,7 @@ async function start() {
     getMilkdrop: () => (active?.selectPreset ? active : null),
     getPlayerState: () => player.state,
     seek: (fraction) => player.seek(fraction),
+    control: player,
     library,
     getLookahead: () => engine.lookahead,
     getInputPeak: () => engine.inputPeak(),
