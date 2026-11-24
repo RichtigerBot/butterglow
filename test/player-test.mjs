@@ -131,6 +131,45 @@ try {
   const position = await music.evaluate(() => audio.currentTime);
   check('Progress bar seeks in the tab', Math.abs(position - 30) < 2, `${position.toFixed(1)} s`);
 
+  // Volume in the player: the same value as in the menu, both ways, with mute, and saved.
+  await page.mouse.move(640, 300);
+  const volumeState = () =>
+    page.evaluate(() => ({
+      player: Number(document.querySelector('.player-volume').value),
+      shown: document.querySelector('.player-volume-value').textContent,
+      menu: Number(document.querySelector('[data-setting="audio.volume"] input').value),
+      setting: app.engine.volume.gain.value,
+    }));
+  await page.$eval('.player-volume', (input) => {
+    input.value = '40';
+    input.dispatchEvent(new Event('input'));
+  });
+  await sleep(400);
+  const fromPlayer = await volumeState();
+  await page.$eval('[data-setting="audio.volume"] input', (input) => {
+    input.value = '70';
+    input.dispatchEvent(new Event('input'));
+  });
+  await sleep(400);
+  const fromMenu = await volumeState();
+  await page.click('.player-mute');
+  await sleep(400);
+  const muted = await volumeState();
+  await page.click('.player-mute');
+  await sleep(600);
+  const unmuted = await volumeState();
+  const saved = await page.evaluate(async () => (await chrome.storage.local.get('hud')).hud?.values?.audio?.volume);
+  check(
+    'The volume slider in the player and the one in the menu show the same value, mute works, and it is saved',
+    fromPlayer.player === 40 && fromPlayer.menu === 40 && fromPlayer.shown === '40 %' && fromMenu.player === 70 && muted.player === 0 && muted.menu === 0 && unmuted.player === 70 && saved === 70,
+    JSON.stringify({ fromPlayer, fromMenu, muted, unmuted, saved }),
+  );
+  check('The player volume really changes the sound', Math.abs(fromMenu.setting - 0.49) < 0.05 || Math.abs(unmuted.setting - 0.49) < 0.05, JSON.stringify({ fromMenu, unmuted }));
+  await page.$eval('.player-volume', (input) => {
+    input.value = '100';
+    input.dispatchEvent(new Event('input'));
+  });
+
   // Position: bottom centre by default, changeable in the menu and saved.
   const box = () =>
     page.$eval('#player', (player) => {

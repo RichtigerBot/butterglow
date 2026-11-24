@@ -272,6 +272,9 @@ export default {
     },
   },
   player: {
+    mute: 'Stumm schalten',
+    unmute: 'Ton wieder an',
+    volume: 'Lautstärke',
     label: 'Media Player',
     pin: 'Player anpinnen',
     pinTitle: 'Player immer anzeigen',

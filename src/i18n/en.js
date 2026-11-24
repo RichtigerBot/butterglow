@@ -272,6 +272,9 @@ export default {
     },
   },
   player: {
+    mute: 'Mute',
+    unmute: 'Unmute',
+    volume: 'Volume',
     label: 'Media player',
     pin: 'Pin player',
     pinTitle: 'Always show the player',

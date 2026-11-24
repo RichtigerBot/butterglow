@@ -139,15 +139,31 @@ export async function createSettingsPanel({ hud, visualizers, sections, onSelect
     return settings;
   }
 
+  // Reactions to changes, per section: the section's own onChange and watchers elsewhere (e.g. the player's volume).
+  const reactions = new Map();
+  const react = (id, settings) => {
+    for (const reaction of reactions.get(id) ?? []) reaction(settings);
+  };
+  const addReaction = (id, reaction) => {
+    if (!reactions.has(id)) reactions.set(id, new Set());
+    reactions.get(id).add(reaction);
+    return () => reactions.get(id).delete(reaction);
+  };
+
   // `onChange` is optional, for parts that need to do more on a change than read the value.
+  const reacting = new Set(); // sections whose onChange is registered already (the menu is rebuilt on a language switch)
   function renderFields(container, id, schema, onChange) {
     const settings = settingsFor(id, schema);
+    if (onChange && !reacting.has(id)) {
+      reacting.add(id);
+      addReaction(id, onChange);
+    }
     for (const field of schema) {
       const row = createControl(field, settings[field.id], (value) => {
         settings[field.id] = value;
         values[id] = { ...values[id], [field.id]: value };
         save();
-        onChange?.(settings);
+        react(id, settings);
       });
       row.dataset.setting = `${id}.${field.id}`; // fixed name for tests, independent of the language
       container.append(row);
@@ -233,8 +249,29 @@ export async function createSettingsPanel({ hud, visualizers, sections, onSelect
   renderAll();
   onLanguageChange(renderAll);
 
+  // Changes a value from outside the menu (e.g. the volume slider in the player): saved, shown in the menu, and
+  // passed on like a change made in the menu.
+  function setValue(id, fieldId, value) {
+    const settings = live.get(id);
+    if (!settings || settings[fieldId] === value) return;
+    settings[fieldId] = value;
+    values[id] = { ...values[id], [fieldId]: value };
+    save();
+    const row = hud.querySelector(`[data-setting="${id}.${fieldId}"]`);
+    const input = row?.querySelector('input[type="range"]');
+    if (input) {
+      input.value = value;
+      const output = row.querySelector('output');
+      if (output) output.textContent = output.textContent.replace(/^-?[\d.]+/, String(value));
+    }
+    react(id, settings);
+  }
+
   return {
     settingsFor,
+    setValue,
+    // `listener(settings)` after every change of the section, from the menu or setValue. Returns a function to stop.
+    watch: addReaction,
     get pinned() {
       return state.pinned;
     },
