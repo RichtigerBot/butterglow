@@ -59,6 +59,7 @@
         <span><kbd>N</kbd><span data-i18n="keys.reference">Reference</span></span>
         <span><kbd data-i18n="keys.spaceKey">Space</kbd><span data-i18n="keys.play">Play</span></span>
         <span><kbd>E</kbd><span data-i18n="keys.equalizer">Equalizer</span></span>
+        <span><kbd>T</kbd><span data-i18n="keys.visconf">Visconf</span></span>
         <span><kbd>F</kbd><span data-i18n="keys.fullscreen">Full screen</span></span>
         <span><kbd>D</kbd><span data-i18n="keys.debug">Debug</span></span>
         <span><kbd>Alt</kbd><span data-i18n="keys.hide">Hide</span></span>
@@ -180,6 +181,79 @@
       <div id="eq-presets"></div>
     </section>
 
+    <section id="visconf" aria-label="Visconf editor" data-i18n-aria-label="visconf.label" hidden>
+      <header>
+        <h2 data-i18n="visconf.title">Visconf</h2>
+        <label class="vc-field"><span data-i18n="visconf.songTitle">Title</span><input class="vc-title" type="text" maxlength="300" /></label>
+        <label class="vc-field"><span data-i18n="visconf.artist">Artist</span><input class="vc-artist" type="text" maxlength="300" /></label>
+        <button class="vc-use-tab pb-tool" type="button" title="Take title and artist from the player" data-i18n-title="visconf.useTabTitle" data-i18n="visconf.useTab">This song</button>
+        <button class="vc-load pb-tool" type="button" title="Load and analyse the song as a file" data-i18n-title="visconf.loadTitle" data-i18n="visconf.load">Load file</button>
+        <span class="vc-spacer"></span>
+        <select class="vc-select" aria-label="Visconf of this song" data-i18n-aria-label="visconf.choose"></select>
+        <button class="vc-new pb-tool" type="button" title="New visconf for this song" aria-label="New visconf for this song" data-i18n-title="visconf.new" data-i18n-aria-label="visconf.new">+</button>
+        <button class="vc-rename pb-tool" type="button" title="Rename" aria-label="Rename" data-i18n-title="visconf.rename" data-i18n-aria-label="visconf.rename">✎</button>
+        <button class="vc-delete pb-tool" type="button" title="Delete visconf" aria-label="Delete visconf" data-i18n-title="visconf.deleteVisconf" data-i18n-aria-label="visconf.deleteVisconf">🗑</button>
+        <button class="vc-close pb-tool" type="button" aria-label="Close visconf editor" data-i18n-aria-label="visconf.close">×</button>
+      </header>
+      <form class="vc-name-form" hidden>
+        <input type="text" maxlength="80" aria-label="Name of the visconf" data-i18n-aria-label="visconf.name" />
+        <button type="submit">OK</button>
+        <button type="button" data-action="cancel" data-i18n="browser.cancel">Cancel</button>
+      </form>
+      <div class="vc-transport">
+        <button class="vc-record pb-tool" type="button" aria-pressed="false" title="Plays the song in the tab from the start and analyses it once" data-i18n-title="visconf.recordTitle"></button>
+        <button class="vc-mark pb-tool" type="button" title="A new change where the song is right now (key C, also with the editor closed)" data-i18n-title="visconf.markTitle" data-i18n="visconf.mark">+ Change here (C)</button>
+        <button class="vc-to-start pb-tool" type="button" title="To the start" aria-label="To the start" data-i18n-title="visconf.toStart" data-i18n-aria-label="visconf.toStart"></button>
+        <button class="vc-back pb-tool" type="button" title="5 seconds back" aria-label="5 seconds back" data-i18n-title="visconf.back" data-i18n-aria-label="visconf.back">−5 s</button>
+        <button class="vc-toggle pb-tool" type="button" title="Play / pause" aria-label="Play / pause" data-i18n-title="visconf.toggle" data-i18n-aria-label="visconf.toggle"></button>
+        <button class="vc-forward pb-tool" type="button" title="5 seconds forward" aria-label="5 seconds forward" data-i18n-title="visconf.forward" data-i18n-aria-label="visconf.forward">+5 s</button>
+        <span class="vc-clock">0:00.0 / 0:00.0</span>
+        <span class="vc-end" role="group" aria-label="At the end of the song" data-i18n-aria-label="visconf.endLabel">
+          <span class="vc-end-label" data-i18n="visconf.end">At the end</span>
+          <button class="vc-end-repeat pb-tool" type="button" aria-pressed="false" title="Repeat: start the song again from the beginning" aria-label="Repeat" data-i18n-title="visconf.repeatTitle" data-i18n-aria-label="visconf.repeat"></button>
+          <button class="vc-end-stop pb-tool" type="button" aria-pressed="false" title="Stop: pause the tab, so no next song starts" aria-label="Stop at the end" data-i18n-title="visconf.stopAtEndTitle" data-i18n-aria-label="visconf.stopAtEnd"></button>
+        </span>
+        <span class="vc-spacer"></span>
+        <span class="vc-live" role="status"></span>
+        <label class="vc-play" title="Change the presets as planned whenever this song plays in the tab" data-i18n-title="visconf.playTitle"><input type="checkbox" checked /> <span data-i18n="visconf.play">Apply plan</span></label>
+      </div>
+      <div class="vc-tools">
+        <label class="vc-field"><span data-i18n="visconf.tempo">Tempo</span><input class="vc-tempo" type="number" min="40" max="240" step="0.01" aria-label="Tempo in BPM" data-i18n-aria-label="visconf.tempoLabel" /></label>
+        <button class="vc-tap pb-tool" type="button" title="Tap along to the beat; after four taps the grid takes the tempo" data-i18n-title="visconf.tapTitle" data-i18n="visconf.tap">Tap</button>
+        <button class="vc-downbeat pb-tool" type="button" title="Put a beat of the grid on the playhead" data-i18n-title="visconf.downbeatTitle" data-i18n="visconf.downbeat">Beat here</button>
+        <button class="vc-undo pb-tool" type="button" disabled title="Undo (Ctrl+Z)" aria-label="Undo (Ctrl+Z)" data-i18n-title="visconf.undo" data-i18n-aria-label="visconf.undo">↶</button>
+        <button class="vc-redo pb-tool" type="button" disabled title="Redo (Ctrl+Y)" aria-label="Redo (Ctrl+Y)" data-i18n-title="visconf.redo" data-i18n-aria-label="visconf.redo">↷</button>
+        <label class="vc-snap" title="Markers and changes snap to the beat grid" data-i18n-title="visconf.snapTitle"><input type="checkbox" checked /> <span data-i18n="visconf.snap">Snap to beat</span></label>
+        <span class="vc-spacer"></span>
+        <button class="vc-draft pb-tool" type="button" title="Makes a plan with a change on every drop and quiet part" data-i18n-title="visconf.draftTitle" data-i18n="visconf.draft">Plan from markers</button>
+        <button class="vc-restore pb-tool" type="button" title="Back to the markers of the analysis" data-i18n-title="visconf.restoreTitle" data-i18n="visconf.restore">Reset markers</button>
+        <button class="vc-fit pb-tool" type="button" title="Show the whole song" data-i18n-title="visconf.fitTitle" data-i18n="visconf.fit">Show all</button>
+        <button class="vc-export pb-tool" type="button" title="Download all visconfs as a file" data-i18n-title="visconf.exportTitle" data-i18n="visconf.export">Export</button>
+        <button class="vc-import pb-tool" type="button" title="Load visconfs from a file" data-i18n-title="visconf.importTitle" data-i18n="visconf.import">Import</button>
+      </div>
+      <div class="vc-timeline">
+        <canvas class="vc-canvas" aria-label="Timeline of the song" data-i18n-aria-label="visconf.timeline"></canvas>
+        <div class="vc-tooltip" hidden></div>
+      </div>
+      <div class="vc-inspector"></div>
+      <p class="vc-status" role="status"></p>
+      <input class="vc-file" type="file" accept="audio/*,video/*" hidden />
+      <input class="vc-import-file" type="file" accept=".json" hidden />
+      <datalist id="vc-preset-names"></datalist>
+      <div class="vc-picker" role="dialog" aria-label="Choose a preset" data-i18n-aria-label="visconf.pickerTitle" hidden>
+        <div class="vc-picker-head">
+          <strong data-i18n="visconf.pickerTitle">Choose a preset</strong>
+          <input class="vc-picker-search" type="search" placeholder="Search name or nickname" data-i18n-placeholder="visconf.pickerSearch" aria-label="Search name or nickname" data-i18n-aria-label="visconf.pickerSearch" />
+          <span class="vc-picker-count"></span>
+          <span class="vc-spacer"></span>
+          <span class="vc-picker-hint" data-i18n="visconf.pickerHint">✎ gives a preset a nickname</span>
+          <button class="vc-picker-close pb-tool" type="button" aria-label="Close" data-i18n-aria-label="visconf.pickerClose">×</button>
+        </div>
+        <div class="vc-picker-grid"></div>
+      </div>
+    </section>
+
+    <button id="visconf-badge" type="button" hidden title="Open the visconf editor (T)" data-i18n-title="visconf.badgeTitle"></button>
     <button id="status" hidden></button>
 
     <!-- Only appears if the script never runs (it removes this element first thing). No JavaScript, so both languages. -->

@@ -5,8 +5,7 @@ import { onLanguageChange, t } from '../i18n/i18n.js';
 import { browserHint } from '../milk/custom-store.js';
 import { downloadText } from './download.js';
 import { ALL, BACKUP_FILE, FAVORITES, OWN, parsePresetName } from './preset-library.js';
-
-const PREVIEW_FILE = 'previews.json';
+import { loadPreviews as fetchPreviews, previewImage } from './preset-previews.js';
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -15,15 +14,7 @@ function element(tag, className, text) {
   return node;
 }
 
-// Placeholder while there is no preview image: a gradient that stays the same for each preset.
-function placeholderFor(name) {
-  let hash = 0;
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) | 0;
-  const hue = Math.abs(hash) % 360;
-  return `linear-gradient(135deg, hsl(${hue} 70% 35%), hsl(${(hue + 60) % 360} 70% 15%))`;
-}
-
-export function createPresetBrowser({ hud, library, customPresets, getVisualizer, onChange }) {
+export function createPresetBrowser({ hud, library, customPresets, nicknames = null, getVisualizer, onChange }) {
   const row = hud.querySelector('#hud-preset');
   const favoriteButton = row.querySelector('#hud-favorite');
   const browseButton = row.querySelector('#hud-browse');
@@ -50,17 +41,15 @@ export function createPresetBrowser({ hud, library, customPresets, getVisualizer
   let formMode = null; // 'create' or 'rename'
   let openMenu = null;
   let shownKey = ''; // content of the list, so it is only rebuilt when that changes
+  let nicknameVersion = 0; // goes up with every change of a nickname, so the list is rebuilt
 
   function loadPreviews() {
     if (previewsRequested) return;
     previewsRequested = true;
-    fetch(PREVIEW_FILE)
-      .then((response) => (response.ok ? response.json() : {}))
-      .catch(() => ({}))
-      .then((data) => {
-        previews = data;
-        if (open) renderList({ jumpToPlaying: false });
-      });
+    fetchPreviews().then((data) => {
+      previews = data;
+      if (open) renderList({ jumpToPlaying: false });
+    });
   }
 
   const presetVisualizer = () => {
@@ -125,6 +114,7 @@ export function createPresetBrowser({ hud, library, customPresets, getVisualizer
 
   function entryFor(name, playing) {
     const { title, author } = parsePresetName(name);
+    const nickname = nicknames?.get(name) ?? '';
     const item = element('li', 'pb-entry');
     item.dataset.name = name;
     if (name === playing) item.classList.add('playing');
@@ -133,11 +123,12 @@ export function createPresetBrowser({ hud, library, customPresets, getVisualizer
     select.type = 'button';
     select.title = name;
     const thumb = element('span', 'pb-thumb');
-    const image = previews?.[name];
-    thumb.style.backgroundImage = image ? `url(${image})` : placeholderFor(name);
+    thumb.style.backgroundImage = previewImage(previews, name);
     const text = element('span', 'pb-text');
-    text.append(element('span', 'pb-title', title));
-    if (author) text.append(element('span', 'pb-author', author));
+    // With a nickname, the nickname is the title and the original name stays below it.
+    text.append(element('span', 'pb-title', nickname || title));
+    if (nickname) text.append(element('span', 'pb-author', name));
+    else if (author) text.append(element('span', 'pb-author', author));
     if (customPresets?.has(name)) {
       item.classList.add('own');
       text.append(element('span', 'pb-badge', t('browser.ownBadge', { folder: customPresets.get(name).folder })));
@@ -196,8 +187,8 @@ export function createPresetBrowser({ hud, library, customPresets, getVisualizer
     if (!visualizer) return;
     const names = library.namesOf(library.active, visualizer.presetNames);
     const query = search.value.trim().toLowerCase();
-    const shown = query ? names.filter((name) => name.toLowerCase().includes(query)) : names;
-    const key = [library.active, query, ...shown].join('|');
+    const shown = query ? names.filter((name) => (nicknames ? nicknames.matches(name, query) : name.toLowerCase().includes(query))) : names;
+    const key = [library.active, query, nicknameVersion, ...shown].join('|');
     if (key === shownKey && previewsShown === Boolean(previews)) {
       refreshStars();
       if (jumpToPlaying) markPlaying();
@@ -336,6 +327,10 @@ export function createPresetBrowser({ hud, library, customPresets, getVisualizer
     renderList();
   });
   search.addEventListener('input', renderList);
+  nicknames?.onChange(() => {
+    nicknameVersion++;
+    if (open) renderList({ jumpToPlaying: false });
+  });
   panel.querySelector('#pb-close').addEventListener('click', () => close());
 
   onLanguageChange(() => {

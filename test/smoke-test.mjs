@@ -1221,6 +1221,263 @@ try {
   await page.keyboard.press('v');
   await page.waitForFunction(() => document.getElementById('hud-title').textContent === 'Neon Ring');
 
+  // Visconf editor: timeline with waveform and markers, dragging, new markers and cues, playback of the plan.
+  // The demo player reports "Demo-Beat" with the audio time as position, so the plan can play without a tab.
+  {
+    const vcPage = await browser.newPage();
+    const vcErrors = collectErrors(vcPage);
+    await vcPage.setViewport({ width: 1400, height: 800 });
+    await vcPage.goto(`${baseUrl}?demo=1`);
+    await vcPage.waitForFunction(() => document.getElementById('hud-title').textContent === 'Milkdrop', { timeout: 30000 });
+    if (await vcPage.evaluate(() => app.engine.context.state !== 'running')) await vcPage.click('#status');
+    check('Key hints name the visconf editor', await vcPage.$$eval('#hud-keys kbd', (keys) => keys.some((key) => key.textContent === 'T')));
+    await vcPage.mouse.move(700, 200);
+    await vcPage.keyboard.press('t');
+    await vcPage.waitForFunction(() => !document.getElementById('visconf').hidden && app.visconfPanel.state.song.title === 'Demo-Beat', { timeout: 5000 }).catch(() => {});
+    check('The plan applies by default', await vcPage.$eval('#visconf .vc-play input', (input) => input.checked));
+    check('T opens the visconf editor with the song from the player', await vcPage.evaluate(() => !document.getElementById('visconf').hidden && app.visconfPanel.state.song.title === 'Demo-Beat'));
+    await vcPage.evaluate(async () => {
+      const peaks = Array.from({ length: 12000 }, (_, i) => 80 + ((i * 37) % 120));
+      const beats = Array.from({ length: 1200 }, (_, i) => i * 0.5);
+      await app.visconfPanel.useAnalysis({ version: 1, source: 'file', duration: 600, waveform: { perSecond: 20, peaks }, drops: [{ time: 100, strength: 1 }], quietParts: [{ start: 200, end: 260 }], quietStarts: [200], beats, bpm: 120 });
+      app.visconfPanel.update({}); // redraw
+    });
+    await sleep(300);
+    const drawn = await vcPage.$eval('.vc-canvas', (canvas) => {
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let lit = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) lit++;
+      return lit / (data.length / 4);
+    });
+    check('The timeline draws waveform and markers', drawn > 0.3, `${Math.round(drawn * 100)} % of the pixels`);
+    const draft = await vcPage.evaluate(() => app.visconfPanel.state.visconf?.cues.map((cue) => [cue.time, cue.transition]));
+    check('The first visconf starts as a draft: hard on the drop, soft at the quiet part', JSON.stringify(draft) === '[[100,"cut"],[200,"soft"]]', JSON.stringify(draft));
+
+    const box = await vcPage.$eval('.vc-canvas', (canvas) => {
+      const rect = canvas.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, width: rect.width };
+    });
+    const xAt = (time) => box.left + (time / 600) * box.width;
+    const waveY = box.top + 58;
+    const cueY = box.top + 122;
+    await vcPage.mouse.move(xAt(100), waveY);
+    await vcPage.mouse.down();
+    await vcPage.mouse.move(xAt(110), waveY, { steps: 5 });
+    await vcPage.mouse.move(xAt(120.1), waveY, { steps: 5 });
+    await vcPage.mouse.up();
+    await sleep(700);
+    const dragged = await vcPage.evaluate(async () => {
+      const { songMarkers } = await chrome.storage.local.get('songMarkers');
+      const saved = Object.values(songMarkers ?? {})[0];
+      const { markers, visconf } = app.visconfPanel.state;
+      return { live: markers.drops.map(({ time, manual }) => [time, manual]), saved: saved?.drops.map(({ time }) => time), cues: visconf.cues.map(({ time }) => time) };
+    });
+    check(
+      'Dragging a drop moves it onto the beat, marks it as set by hand and saves it',
+      dragged.live.length === 1 && Math.abs(dragged.live[0][0] - 120) < 0.6 && dragged.live[0][0] * 2 === Math.round(dragged.live[0][0] * 2) && dragged.live[0][1] && dragged.saved?.[0] === dragged.live[0][0],
+      JSON.stringify(dragged),
+    );
+    check('The change of a drop moves along with it', dragged.cues.includes(dragged.live[0][0]) && !dragged.cues.includes(100), JSON.stringify(dragged.cues));
+
+    await vcPage.mouse.click(xAt(400), waveY);
+    await vcPage.mouse.click(xAt(400), waveY);
+    await sleep(200);
+    const counts = () => vcPage.evaluate(() => ({ drops: app.visconfPanel.state.markers.drops.length, cues: app.visconfPanel.state.visconf.cues.length, selected: app.visconfPanel.state.selected?.kind }));
+    const added = await counts();
+    await vcPage.keyboard.press('Delete');
+    await sleep(200);
+    const afterDelete = await counts();
+    check(
+      'Double-click adds a drop with its own change, Delete removes both again',
+      added.drops === 2 && added.cues === 3 && added.selected === 'drop' && afterDelete.drops === 1 && afterDelete.cues === 2,
+      JSON.stringify({ added, afterDelete }),
+    );
+    await vcPage.keyboard.down('Control');
+    await vcPage.keyboard.press('z');
+    await vcPage.keyboard.up('Control');
+    await sleep(200);
+    const undone = await counts();
+    await vcPage.keyboard.down('Control');
+    await vcPage.keyboard.press('y');
+    await vcPage.keyboard.up('Control');
+    await sleep(700);
+    const redone = await counts();
+    const savedCues = await vcPage.evaluate(async () => (await chrome.storage.local.get('visconfs')).visconfs?.[0]?.cues.length);
+    check(
+      'Ctrl+Z brings the deleted drop back, Ctrl+Y removes it again',
+      undone.drops === 2 && undone.cues === 3 && redone.drops === 1 && redone.cues === 2 && savedCues === 2,
+      JSON.stringify({ undone, redone, savedCues }),
+    );
+
+    await vcPage.mouse.click(xAt(300), cueY);
+    await vcPage.mouse.click(xAt(300), cueY);
+    await sleep(200);
+    const cueCount = await vcPage.evaluate(() => app.visconfPanel.state.visconf.cues.length);
+    const inspector = await vcPage.$eval('.vc-inspector', (element) => element.querySelectorAll('select').length);
+    check('Double-click in the cue lane adds a change and shows its settings', cueCount === 3 && inspector >= 3, `${cueCount} cues, ${inspector} selects`);
+
+    // Choosing the preset of a change by its picture, and giving a preset a nickname.
+    await vcPage.click('#visconf .vc-pick');
+    await vcPage
+      .waitForFunction(() => document.querySelectorAll('#visconf .vc-tile').length > 100 && /data:image/.test(document.querySelector('#visconf .vc-tile-thumb').style.backgroundImage), { timeout: 8000 })
+      .catch(() => {});
+    const pickerShown = await vcPage.evaluate(() => {
+      const picker = document.querySelector('#visconf .vc-picker').getBoundingClientRect();
+      return {
+        visible: !document.querySelector('#visconf .vc-picker').hidden,
+        onScreen: picker.top >= 0 && picker.height > 150,
+        rect: [Math.round(picker.top), Math.round(picker.height), Math.round(document.getElementById("visconf").getBoundingClientRect().top), innerHeight],
+        tiles: document.querySelectorAll('#visconf .vc-tile').length,
+        all: app.active.presetNames.length,
+        image: /data:image/.test(document.querySelector('#visconf .vc-tile-thumb')?.style.backgroundImage ?? ''),
+      };
+    });
+    check('"Picture …" opens a grid with the preview images of all presets', pickerShown.visible && pickerShown.onScreen && pickerShown.tiles === pickerShown.all && pickerShown.image, JSON.stringify(pickerShown));
+    await vcPage.screenshot({ path: 'test-output/visconf-picker.png' });
+    const chosen = await vcPage.$eval('#visconf .vc-tile:nth-child(3)', (tile) => tile.dataset.name);
+    await vcPage.hover('#visconf .vc-tile:nth-child(3)');
+    await vcPage.click('#visconf .vc-tile:nth-child(3) .vc-tile-rename');
+    await vcPage.keyboard.type('Mein Liebling');
+    await vcPage.keyboard.press('Enter');
+    await sleep(200);
+    const nickname = await vcPage.evaluate(
+      async (name) => ({
+        label: document.querySelector(`#visconf .vc-tile[data-name="${CSS.escape(name)}"] .vc-tile-name`)?.textContent,
+        stored: (await chrome.storage.local.get('presetNicknames')).presetNicknames?.[name],
+        picker: !document.querySelector('#visconf .vc-picker').hidden,
+      }),
+      chosen,
+    );
+    check('✎ gives a preset a nickname; it is saved and shown on its tile', nickname.label === 'Mein Liebling' && nickname.stored === 'Mein Liebling' && nickname.picker, JSON.stringify(nickname));
+    await vcPage.type('#visconf .vc-picker-search', 'liebling');
+    const found = await vcPage.$$eval('#visconf .vc-tile', (tiles) => tiles.map((tile) => tile.dataset.name));
+    check('The search of the picker finds a preset by its nickname', found.length === 1 && found[0] === chosen, JSON.stringify(found));
+    await vcPage.click('#visconf .vc-tile .vc-tile-choose');
+    await sleep(200);
+    const picked = await vcPage.evaluate(() => {
+      const { visconf, selected } = app.visconfPanel.state;
+      const cue = visconf.cues.find((entry) => entry.id === selected?.id);
+      return { hidden: document.querySelector('#visconf .vc-picker').hidden, preset: cue?.preset, time: cue?.time, thumb: document.querySelector('#visconf .vc-pick').style.backgroundImage.slice(0, 20) };
+    });
+    check(
+      'A click on a picture makes it the fixed preset of the change',
+      picked.hidden && picked.preset?.mode === 'fixed' && picked.preset.name === chosen && picked.thumb.includes('data:image'),
+      JSON.stringify(picked),
+    );
+    await vcPage.mouse.move(xAt(picked.time + 10), cueY);
+    await sleep(200);
+    const tip = await vcPage.evaluate(() => ({
+      text: document.querySelector('#visconf .vc-tooltip').textContent,
+      image: !document.querySelector('#visconf .vc-tooltip-thumb')?.hidden && /data:image/.test(document.querySelector('#visconf .vc-tooltip-thumb')?.style.backgroundImage ?? ''),
+    }));
+    check('The tooltip of the timeline shows the picture and the nickname of the preset', tip.image && tip.text.includes('Mein Liebling'), JSON.stringify(tip));
+    await vcPage.evaluate((name) => app.nicknames.set(name, ''), chosen);
+
+    // Dragging a drop while the song has no visconf used to put an empty entry into the list and break saving.
+    const withoutVisconf = await vcPage.evaluate(async () => {
+      const panel = app.visconfPanel;
+      const keep = panel.state.visconf;
+      panel.update({ visconf: null }, { save: false, record: false });
+      return keep.id;
+    });
+    await vcPage.mouse.move(xAt(dragged.live[0][0]), waveY);
+    await vcPage.mouse.down();
+    await vcPage.mouse.move(xAt(dragged.live[0][0] + 20), waveY, { steps: 5 });
+    await vcPage.mouse.up();
+    await sleep(700);
+    const noVisconf = await vcPage.evaluate(() => ({ status: document.querySelector('#visconf .vc-status').textContent, broken: app.visconfPanel.state.visconfs.some((entry) => !entry) }));
+    check('Dragging a drop without a visconf saves without an error', !noVisconf.broken && !/save|speicher/i.test(noVisconf.status), JSON.stringify(noVisconf));
+    await vcPage.evaluate((id) => {
+      const panel = app.visconfPanel;
+      panel.update({ visconf: panel.state.visconfs.find((entry) => entry.id === id) }, { record: false });
+    }, withoutVisconf);
+
+    // Playback: a fixed preset 1.5 s ahead of the playhead must show up on time.
+    const target = await vcPage.evaluate(async () => {
+      const panel = app.visconfPanel;
+      const names = app.active.presetNames;
+      const name = names.find((candidate) => candidate !== app.active.presetName && !candidate.includes('FractalDrop'));
+      const now = app.player.state.position;
+      await panel.loadSong({ title: 'Demo-Beat', artist: 'ButterGlow' });
+      const { visconf } = panel.state;
+      panel.update({ visconf: { ...visconf, cues: [{ id: 'a', time: now + 1.5, preset: { mode: 'fixed', name }, transition: 'cut', origin: 'manual', label: '' }] } });
+      panel.setPlay(true);
+      return name;
+    });
+    await vcPage.waitForFunction((name) => app.active.presetName === name, { timeout: 8000 }, target).catch(() => {});
+    const playback = await vcPage.evaluate(() => ({ preset: app.active.presetName, playing: app.visconfPanel.playing, live: app.visconfPanel.state.live }));
+    check('A playing plan switches to the planned preset on time', playback.preset === target && playback.playing, JSON.stringify(playback));
+    check('The live line says that the plan changed the preset', playback.live.includes('Changed at') && playback.live.includes(target), playback.live);
+    await vcPage.screenshot({ path: 'test-output/visconf.png' });
+    await vcPage.evaluate(() => app.visconfPanel.setPlay(false));
+    await sleep(300);
+    check('The live line says when the plan is off', await vcPage.evaluate(() => app.visconfPanel.state.live === 'Plan is off'));
+
+    // Export: the file is named after the song in the editor, with date and time.
+    const exportName = await vcPage.evaluate(async () => {
+      const original = HTMLAnchorElement.prototype.click;
+      let name = null;
+      HTMLAnchorElement.prototype.click = function () {
+        name = this.download;
+      };
+      document.querySelector('#visconf .vc-export').click();
+      for (let i = 0; i < 50 && name === null; i++) await new Promise((done) => setTimeout(done, 50));
+      HTMLAnchorElement.prototype.click = original;
+      return name;
+    });
+    check('The export is named after artist and song, with date and time', /^ButterGlow_Demo-Beat_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.json$/.test(exportName ?? ''), exportName);
+
+    // Media controls and "Record current song": everything else is locked, closing only hides the editor.
+    const transport = await vcPage.evaluate(() => ({
+      toggle: !document.querySelector('#visconf .vc-toggle').disabled,
+      back: document.querySelector('#visconf .vc-back').disabled, // the demo beat cannot seek
+      clock: document.querySelector('#visconf .vc-clock').textContent,
+    }));
+    check('The editor has media controls with the song time', transport.toggle && transport.back && / \/ /.test(transport.clock), JSON.stringify(transport));
+    await vcPage.click('#visconf .vc-record');
+    await sleep(500);
+    const locked = await vcPage.evaluate(() => ({
+      recording: app.visconfPanel.recording,
+      load: document.querySelector('#visconf .vc-load').disabled,
+      title: document.querySelector('#visconf .vc-title').disabled,
+      apply: document.querySelector('#visconf .vc-play input').disabled,
+      stop: !document.querySelector('#visconf .vc-record').disabled && document.querySelector('#visconf .vc-record').textContent.includes('Stop'),
+      close: !document.querySelector('#visconf .vc-close').disabled,
+      greyed: document.getElementById('visconf').classList.contains('is-recording'),
+    }));
+    check('Recording the current song locks everything except stop and close', Object.values(locked).every(Boolean), JSON.stringify(locked));
+    await vcPage.click('#visconf .vc-close');
+    await sleep(1500);
+    const hidden = await vcPage.evaluate(() => ({ hidden: document.getElementById('visconf').hidden, recording: app.visconfPanel.recording }));
+    await vcPage.keyboard.press('t');
+    await sleep(300);
+    await vcPage.click('#visconf .vc-record');
+    await sleep(500);
+    const unlocked = await vcPage.evaluate(() => ({
+      recording: app.visconfPanel.recording,
+      load: document.querySelector('#visconf .vc-load').disabled,
+      title: document.querySelector('#visconf .vc-title').disabled,
+      greyed: document.getElementById('visconf').classList.contains('is-recording'),
+      source: app.visconfPanel.state.analysis?.source,
+    }));
+    check(
+      'Closing only hides the editor; the recording goes on until stop, then everything is free again',
+      hidden.hidden && hidden.recording && !unlocked.recording && !unlocked.load && !unlocked.title && !unlocked.greyed && unlocked.source === 'live',
+      JSON.stringify({ hidden, unlocked }),
+    );
+
+    const pickLanguage = (language) => { const select = document.getElementById('hud-language'); select.value = language; select.dispatchEvent(new Event('change', { bubbles: true })); };
+    await vcPage.evaluate(pickLanguage, 'de');
+    await vcPage.waitForFunction(() => document.querySelector('#visconf .vc-load').textContent === 'Datei laden', { timeout: 5000 }).catch(() => {});
+    check('The visconf editor follows the language', await vcPage.$eval('#visconf .vc-load', (button) => button.textContent === 'Datei laden'));
+    await vcPage.evaluate(pickLanguage, 'en');
+    await vcPage.keyboard.press('Escape');
+    check('Escape closes the visconf editor', await vcPage.evaluate(() => document.getElementById('visconf').hidden));
+    check('No errors in the visconf editor', vcErrors.length === 0, vcErrors.slice(0, 3).join(' | '));
+    await vcPage.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers']));
+    await vcPage.close();
+  }
+
   // Backup: everything in one file, and back into a changed extension. Own page, because reading a backup reloads it.
   {
     const bkPage = await browser.newPage();

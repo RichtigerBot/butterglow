@@ -41,7 +41,7 @@ body.menus-hidden {
   cursor: none;
 }
 
-body.menus-hidden :is(#hud, #debug, #player, #preset-browser, .preset-editor, #equalizer, #status) {
+body.menus-hidden :is(#hud, #debug, #player, #preset-browser, .preset-editor, #equalizer, #visconf, #visconf-badge, #status) {
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
@@ -1928,4 +1928,445 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
 #preset-reference textarea,
 #preset-reference .pe-base-row input {
   cursor: text;
+}
+
+/* Visconf editor: across the bottom, above the player, so the timeline gets the whole width. */
+#visconf {
+  position: fixed;
+  z-index: 4;
+  left: 24px;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 13px;
+  background: rgb(10 7 26 / 88%);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+}
+
+#visconf[hidden],
+#visconf .vc-name-form[hidden] {
+  display: none;
+}
+
+#visconf header,
+#visconf .vc-transport,
+#visconf .vc-tools,
+#visconf .vc-inspector,
+#visconf .vc-name-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+#visconf h2 {
+  margin: 0 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#visconf .vc-spacer {
+  flex: 1;
+}
+
+#visconf .vc-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgb(255 255 255 / 70%);
+}
+
+#visconf input[type='text'],
+#visconf input[type='number'],
+#visconf select {
+  padding: 4px 7px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  background: rgb(255 255 255 / 8%);
+}
+
+#visconf select option {
+  color: #fff;
+  background: #1a1530;
+}
+
+#visconf .vc-title {
+  width: 200px;
+}
+
+#visconf .vc-artist {
+  width: 150px;
+}
+
+#visconf .vc-tempo {
+  width: 80px;
+}
+
+#visconf .vc-preset {
+  width: 280px;
+}
+
+#visconf .vc-label {
+  width: 140px;
+}
+
+#visconf .vc-clock {
+  min-width: 11ch;
+  color: rgb(255 255 255 / 75%);
+  font-variant-numeric: tabular-nums;
+}
+
+#visconf .vc-record[aria-pressed='true'] {
+  color: #fff;
+  background: rgb(220 50 70 / 85%);
+}
+
+/* While a song is recorded, everything except stop and close is greyed out. */
+#visconf.is-recording .vc-timeline {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+#visconf.is-recording label,
+#visconf label:has(input:disabled) {
+  opacity: 0.45;
+}
+
+#visconf .vc-play,
+#visconf .vc-snap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+#visconf .pb-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#visconf .vc-record[aria-pressed='true'] {
+  background: rgb(255 70 100 / 55%);
+}
+
+/* Own icons in the media controls (icons.js): same height as the text buttons next to them. */
+#visconf .vc-transport .pb-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+#visconf .vc-to-start,
+#visconf .vc-toggle,
+#visconf .vc-end .pb-tool {
+  width: 32px;
+  padding: 0;
+}
+
+#visconf .pb-tool .icon {
+  flex: none;
+  display: block;
+}
+
+#visconf .vc-record[aria-pressed='true'] .icon {
+  animation: visconf-badge-pulse 1.2s ease-in-out infinite;
+}
+
+/* "At the end": two small toggles, repeat and stop, of which at most one is on. */
+#visconf .vc-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#visconf .vc-end-label {
+  margin-right: 2px;
+  color: rgb(255 255 255 / 70%);
+}
+
+#visconf .vc-end .pb-tool[aria-pressed='true'] {
+  color: #10161f;
+  background: rgb(140 220 255 / 90%);
+}
+
+#visconf .vc-timeline {
+  position: relative;
+}
+
+#visconf .vc-canvas {
+  display: block;
+  width: 100%;
+  height: 144px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+#visconf .vc-tooltip {
+  position: absolute;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: rgb(0 0 0 / 80%);
+  pointer-events: none;
+}
+
+#visconf .vc-help,
+#visconf .vc-origin {
+  margin: 0;
+  color: rgb(255 255 255 / 55%);
+}
+
+#visconf .vc-time {
+  font-variant-numeric: tabular-nums;
+}
+
+#visconf .vc-live {
+  color: rgb(255 255 255 / 75%);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+
+#visconf .vc-live.is-running {
+  color: rgb(120 230 190);
+}
+
+#visconf .vc-status {
+  min-height: 1em;
+  margin: 0;
+  color: rgb(255 255 255 / 70%);
+}
+
+/* Outside the visconf editor: a recording runs, or a change was just set with C. A click opens the editor. */
+#visconf-badge {
+  position: fixed;
+  z-index: 5;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 6px 14px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  background: rgb(10 10 20 / 72%);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font: 500 13px system-ui, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+#visconf-badge[hidden] {
+  display: none;
+}
+
+#visconf-badge.is-recording::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: rgb(255 70 90);
+  vertical-align: 0;
+  animation: visconf-badge-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes visconf-badge-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #visconf-badge.is-recording::before,
+  #visconf .vc-record[aria-pressed='true'] .icon {
+    animation: none;
+  }
+}
+
+/* Picture of the preset in the tooltip of the timeline and in the inspector. */
+#visconf .vc-tooltip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#visconf .vc-tooltip-thumb {
+  width: 96px;
+  height: 54px;
+  flex: none;
+  border-radius: 4px;
+  background: center / cover no-repeat #000;
+}
+
+#visconf .vc-tooltip-thumb[hidden] {
+  display: none;
+}
+
+#visconf .vc-pick {
+  width: 64px;
+  height: 36px;
+  flex: none;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 4px;
+  background: center / cover no-repeat rgb(255 255 255 / 8%);
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+#visconf .vc-pick:hover,
+#visconf .vc-pick:focus-visible {
+  border-color: #fff;
+}
+
+/* Choosing a preset by its picture: above the editor, as wide as it. */
+#visconf .vc-picker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  max-height: 600px; /* set on opening to the space above the editor (preset-picker.js) */
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgb(10 7 26 / 94%);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+}
+
+#visconf .vc-picker[hidden] {
+  display: none;
+}
+
+#visconf .vc-picker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+#visconf .vc-picker-search {
+  width: min(280px, 100%);
+}
+
+#visconf .vc-picker-count,
+#visconf .vc-picker-hint {
+  color: rgb(255 255 255 / 55%);
+  font-size: 12px;
+}
+
+#visconf .vc-picker-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+#visconf .vc-tile {
+  position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+
+#visconf .vc-tile-choose {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 5%);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+#visconf .vc-tile-choose:hover,
+#visconf .vc-tile-choose:focus-visible {
+  border-color: rgb(255 255 255 / 60%);
+}
+
+#visconf .vc-tile.is-selected .vc-tile-choose {
+  border-color: rgb(255 205 90);
+  background: rgb(255 205 90 / 12%);
+}
+
+#visconf .vc-tile-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  background: center / cover no-repeat #000;
+}
+
+#visconf .vc-tile-name,
+#visconf .vc-tile-nickname {
+  min-height: 2.6em;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+#visconf .vc-tile-nickname {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  margin-top: 2px;
+}
+
+#visconf .vc-tile-name[hidden] {
+  display: none;
+}
+
+#visconf .vc-tile-rename {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 65%);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+}
+
+#visconf .vc-tile:hover .vc-tile-rename,
+#visconf .vc-tile-rename:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  #visconf .vc-tile-rename {
+    opacity: 1;
+  }
 }
