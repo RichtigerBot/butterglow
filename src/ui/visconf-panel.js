@@ -14,6 +14,8 @@ import { addDrop, beatsOf, createTapTempo, removeDrop, removeQuiet, setDownbeat,
 import { LAYOUT, applyDrag, followView, formatTime, fullView, hitTest, insertCue, scrollView, snapTime, timeToX, xToTime, zoomView } from '../visconf/timeline-geometry.js';
 import { ALL_PRESETS, FILE_NAME, createVisconf, cueAt, cuesFromMarkers, followMarkers, fromFile, removeCue, sameSong, songKey, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
 import { createVisconfStore } from '../visconf/visconf-store.js';
+import { createPresetPicker } from './preset-picker.js';
+import { loadPreviews, previewImage } from './preset-previews.js';
 
 const SOFT_BLEND_SECONDS = 3;
 const SAVE_DELAY_MS = 400;
@@ -40,7 +42,7 @@ const COLORS = {
   sections: ['rgb(255 205 90 / 14%)', 'rgb(160 120 255 / 14%)'],
 };
 
-export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerState, seek, control, library, getLookahead, getInputPeak, onChange, store = createVisconfStore() }) {
+export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerState, seek, control, library, nicknames = null, getLookahead, getInputPeak, onChange, store = createVisconfStore() }) {
   const $ = (selector) => root.querySelector(selector);
   const canvas = $('.vc-canvas');
   const tooltip = $('.vc-tooltip');
@@ -61,6 +63,23 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
   const toggleButton = $('.vc-toggle');
   const repeatToggle = $('.vc-repeat input');
   const markButton = $('.vc-mark');
+  let previews = null; // preview images of the presets, loaded when the editor opens first
+  let pickingFor = null; // id of the cue the picker chooses a preset for
+  const picker = createPresetPicker({
+    root: $('.vc-picker'),
+    getNames: () => getMilkdrop()?.presetNames ?? [],
+    nicknames,
+    onPick: (name) => {
+      if (visconf?.cues.some((cue) => cue.id === pickingFor)) update({ visconf: updateCue(visconf, pickingFor, { preset: { mode: 'fixed', name } }) });
+    },
+    onClose: () => (pickingFor = null),
+  });
+  const shownName = (name) => nicknames?.display(name) ?? name;
+  nicknames?.onChange(() => {
+    dirty = true;
+    renderInspector();
+    onChange?.();
+  });
 
   let open = false;
   let song = songOf({});
@@ -323,6 +342,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
       return;
     }
     const begin = async () => {
+      picker.close();
       const state = getPlayerState();
       const canSeek = Boolean(state?.canSeek);
       recorder = createSongRecorder();
@@ -558,7 +578,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
   }
 
   function presetText(cue) {
-    if (cue.preset.mode === 'fixed') return cue.preset.name;
+    if (cue.preset.mode === 'fixed') return shownName(cue.preset.name);
     const collection = library.collections.find((entry) => entry.id === cue.preset.pool);
     return t('visconf.randomFrom', { collection: collection?.name ?? t('library.all') });
   }
@@ -678,10 +698,20 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
     else if (hit?.kind === 'ruler' && markers?.grid?.bpm) lines.push(t('visconf.tipRuler'));
     const cue = visconf ? cueAt(visconf, time) : null;
     if (cue) lines.push(t('visconf.tipSection', { preset: `${cue.label ? `${cue.label}: ` : ''}${presetText(cue)} (${t(cue.transition === 'soft' ? 'visconf.soft' : 'visconf.cut')})` }));
-    tooltip.textContent = lines.join(' · ');
+    // The picture of the preset in this section: the fixed one, or for a random one the preset showing right now,
+    // if this is the section that plays. Otherwise it is only decided when the change comes.
+    const pictured = cue?.preset.mode === 'fixed' ? cue.preset.name : playing && cuePlayer.active?.id === cue?.id ? getMilkdrop()?.presetName : null;
+    const thumb = tooltip.querySelector('.vc-tooltip-thumb') ?? document.createElement('span');
+    thumb.className = 'vc-tooltip-thumb';
+    const caption = tooltip.querySelector('.vc-tooltip-text') ?? document.createElement('span');
+    caption.className = 'vc-tooltip-text';
+    caption.textContent = lines.join(' · ');
+    thumb.hidden = !pictured;
+    if (pictured) thumb.style.backgroundImage = previewImage(previews, pictured);
+    if (!tooltip.contains(caption)) tooltip.replaceChildren(thumb, caption);
     tooltip.hidden = false;
     tooltip.style.left = `${Math.min(x + 12, width - tooltip.offsetWidth - 4)}px`;
-    tooltip.style.top = `${y < LAYOUT.height / 2 ? y + 16 : y - 30}px`;
+    tooltip.style.top = `${y < LAYOUT.height / 2 ? y + 16 : y - tooltip.offsetHeight - 8}px`;
   }
 
   // --- Toolbar, selection and inspector ---
@@ -791,7 +821,20 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
       cue.preset.mode,
       (value) => update({ visconf: updateCue(visconf, cue.id, { preset: value === 'fixed' ? { mode: 'fixed', name: cue.preset.name ?? getMilkdrop()?.presetName ?? '' } : { mode: 'random', pool: ALL_PRESETS } }) }),
     );
-    const parts = [text('span', formatTime(cue.time), 'vc-time'), mode];
+    const parts = [text('span', formatTime(cue.time), 'vc-time')];
+    // The picture of the fixed preset; a click opens the picker. For a random one the picker makes it fixed.
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'vc-pick';
+    pick.title = t('visconf.pickTitle');
+    pick.setAttribute('aria-label', t('visconf.pickTitle'));
+    if (cue.preset.mode === 'fixed' && cue.preset.name) pick.style.backgroundImage = previewImage(previews, cue.preset.name);
+    else pick.textContent = t('visconf.pick');
+    pick.addEventListener('click', () => {
+      pickingFor = cue.id;
+      picker.show(cue.preset.mode === 'fixed' ? cue.preset.name : getMilkdrop()?.presetName);
+    });
+    parts.push(pick, mode);
     if (cue.preset.mode === 'random') {
       parts.push(
         selectBox(
@@ -805,6 +848,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
       input.type = 'text';
       input.className = 'vc-preset';
       input.value = cue.preset.name ?? '';
+      input.title = nicknames?.get(cue.preset.name) ? `${nicknames.get(cue.preset.name)} · ${cue.preset.name}` : (cue.preset.name ?? '');
       input.setAttribute('list', 'vc-preset-names');
       input.setAttribute('aria-label', t('visconf.preset'));
       input.addEventListener('change', () => update({ visconf: updateCue(visconf, cue.id, { preset: { mode: 'fixed', name: input.value } }) }));
@@ -1128,7 +1172,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
     else {
       running = true;
       const next = cuePlayer.upcoming(position);
-      if (fired && nowMs - fired.at < FIRED_SHOW_MS) message = t('visconf.liveFired', { time: formatTime(fired.cue.time), preset: fired.preset });
+      if (fired && nowMs - fired.at < FIRED_SHOW_MS) message = t('visconf.liveFired', { time: formatTime(fired.cue.time), preset: shownName(fired.preset) });
       else message = next ? t('visconf.liveNext', { seconds: Math.ceil(next.inSeconds) }) : t('visconf.liveLast');
     }
     if (message === liveText) return;
@@ -1154,6 +1198,13 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
       open = true;
       root.hidden = false;
       renderBadge(performance.now(), null);
+      if (!previews) {
+        loadPreviews().then((data) => {
+          previews = data;
+          dirty = true;
+          renderInspector();
+        });
+      }
       if (!song.title) {
         const current = tabSong();
         if (current) await loadSong(current);
@@ -1163,6 +1214,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
     // Only hides the editor: a running recording, the plan and the repeat go on.
     close() {
       open = false;
+      picker.close();
       root.hidden = true;
       tooltip.hidden = true;
       nameForm.hidden = true;
@@ -1262,6 +1314,9 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
       return open || Boolean(recorder) || (playToggle.checked && anyPlans);
     },
     markChange,
+    get picker() {
+      return picker;
+    },
 
     // For the smoke test and DevTools.
     get recording() {

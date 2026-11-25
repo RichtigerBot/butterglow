@@ -229,6 +229,17 @@
       <input class="vc-file" type="file" accept="audio/*,video/*" hidden />
       <input class="vc-import-file" type="file" accept=".json" hidden />
       <datalist id="vc-preset-names"></datalist>
+      <div class="vc-picker" role="dialog" aria-label="Choose a preset" data-i18n-aria-label="visconf.pickerTitle" hidden>
+        <div class="vc-picker-head">
+          <strong data-i18n="visconf.pickerTitle">Choose a preset</strong>
+          <input class="vc-picker-search" type="search" placeholder="Search name or nickname" data-i18n-placeholder="visconf.pickerSearch" aria-label="Search name or nickname" data-i18n-aria-label="visconf.pickerSearch" />
+          <span class="vc-picker-count"></span>
+          <span class="vc-spacer"></span>
+          <span class="vc-picker-hint" data-i18n="visconf.pickerHint">✎ gives a preset a nickname</span>
+          <button class="vc-picker-close pb-tool" type="button" aria-label="Close" data-i18n-aria-label="visconf.pickerClose">×</button>
+        </div>
+        <div class="vc-picker-grid"></div>
+      </div>
     </section>
 
     <button id="visconf-badge" type="button" hidden title="Open the visconf editor (T)" data-i18n-title="visconf.badgeTitle"></button>

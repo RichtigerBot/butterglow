@@ -14,6 +14,7 @@ import { createPresetBrowser } from './ui/preset-browser.js';
 import { createPresetEditor } from './ui/preset-editor.js';
 import { createSidePanels } from './ui/side-panels.js';
 import { createVisconfPanel } from './ui/visconf-panel.js';
+import { createNicknames } from './ui/preset-previews.js';
 import { PresetLibrary } from './ui/preset-library.js';
 import { createQuality, qualitySettings } from './ui/quality.js';
 import { createSettingsPanel } from './ui/settings-panel.js';
@@ -56,6 +57,8 @@ let presetBrowser = null;
 let presetEditor = null;
 let presetReference = null;
 let visconfPanel = null;
+const nicknames = createNicknames();
+nicknames.onChange(() => updateHud());
 let sidePanels = null;
 let player = null;
 let library = null;
@@ -77,7 +80,7 @@ function showStatus(message, { onClick } = {}) {
 
 function updateHud() {
   hudTitle.textContent = visualizers[activeIndex]?.name ?? '';
-  hudSubtitle.textContent = active?.presetName ?? '';
+  hudSubtitle.textContent = active?.presetName ? nicknames.display(active.presetName) : '';
   hudSubtitle.title = active?.poolFallback ? t('hud.emptyCollection') : '';
   presetBrowser?.update();
   presetEditor?.update();
@@ -398,6 +401,7 @@ async function start() {
     hud: document.getElementById('hud'),
     library,
     customPresets,
+    nicknames,
     getVisualizer: () => active,
     onChange: () => {
       sidePanels?.layout();
@@ -488,6 +492,7 @@ async function start() {
     seek: (fraction) => player.seek(fraction),
     control: player,
     library,
+    nicknames,
     getLookahead: () => engine.lookahead,
     getInputPeak: () => engine.inputPeak(),
     onChange: wake,
@@ -558,6 +563,9 @@ globalThis.app = {
   },
   get presetReference() {
     return presetReference;
+  },
+  get nicknames() {
+    return nicknames;
   },
   get visconfPanel() {
     return visconfPanel;

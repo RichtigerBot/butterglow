@@ -1309,6 +1309,63 @@ try {
     const inspector = await vcPage.$eval('.vc-inspector', (element) => element.querySelectorAll('select').length);
     check('Double-click in the cue lane adds a change and shows its settings', cueCount === 3 && inspector >= 3, `${cueCount} cues, ${inspector} selects`);
 
+    // Choosing the preset of a change by its picture, and giving a preset a nickname.
+    await vcPage.click('#visconf .vc-pick');
+    await vcPage
+      .waitForFunction(() => document.querySelectorAll('#visconf .vc-tile').length > 100 && /data:image/.test(document.querySelector('#visconf .vc-tile-thumb').style.backgroundImage), { timeout: 8000 })
+      .catch(() => {});
+    const pickerShown = await vcPage.evaluate(() => {
+      const picker = document.querySelector('#visconf .vc-picker').getBoundingClientRect();
+      return {
+        visible: !document.querySelector('#visconf .vc-picker').hidden,
+        onScreen: picker.top >= 0 && picker.height > 150,
+        rect: [Math.round(picker.top), Math.round(picker.height), Math.round(document.getElementById("visconf").getBoundingClientRect().top), innerHeight],
+        tiles: document.querySelectorAll('#visconf .vc-tile').length,
+        all: app.active.presetNames.length,
+        image: /data:image/.test(document.querySelector('#visconf .vc-tile-thumb')?.style.backgroundImage ?? ''),
+      };
+    });
+    check('"Picture …" opens a grid with the preview images of all presets', pickerShown.visible && pickerShown.onScreen && pickerShown.tiles === pickerShown.all && pickerShown.image, JSON.stringify(pickerShown));
+    await vcPage.screenshot({ path: 'test-output/visconf-picker.png' });
+    const chosen = await vcPage.$eval('#visconf .vc-tile:nth-child(3)', (tile) => tile.dataset.name);
+    await vcPage.hover('#visconf .vc-tile:nth-child(3)');
+    await vcPage.click('#visconf .vc-tile:nth-child(3) .vc-tile-rename');
+    await vcPage.keyboard.type('Mein Liebling');
+    await vcPage.keyboard.press('Enter');
+    await sleep(200);
+    const nickname = await vcPage.evaluate(
+      async (name) => ({
+        label: document.querySelector(`#visconf .vc-tile[data-name="${CSS.escape(name)}"] .vc-tile-name`)?.textContent,
+        stored: (await chrome.storage.local.get('presetNicknames')).presetNicknames?.[name],
+        picker: !document.querySelector('#visconf .vc-picker').hidden,
+      }),
+      chosen,
+    );
+    check('✎ gives a preset a nickname; it is saved and shown on its tile', nickname.label === 'Mein Liebling' && nickname.stored === 'Mein Liebling' && nickname.picker, JSON.stringify(nickname));
+    await vcPage.type('#visconf .vc-picker-search', 'liebling');
+    const found = await vcPage.$$eval('#visconf .vc-tile', (tiles) => tiles.map((tile) => tile.dataset.name));
+    check('The search of the picker finds a preset by its nickname', found.length === 1 && found[0] === chosen, JSON.stringify(found));
+    await vcPage.click('#visconf .vc-tile .vc-tile-choose');
+    await sleep(200);
+    const picked = await vcPage.evaluate(() => {
+      const { visconf, selected } = app.visconfPanel.state;
+      const cue = visconf.cues.find((entry) => entry.id === selected?.id);
+      return { hidden: document.querySelector('#visconf .vc-picker').hidden, preset: cue?.preset, time: cue?.time, thumb: document.querySelector('#visconf .vc-pick').style.backgroundImage.slice(0, 20) };
+    });
+    check(
+      'A click on a picture makes it the fixed preset of the change',
+      picked.hidden && picked.preset?.mode === 'fixed' && picked.preset.name === chosen && picked.thumb.includes('data:image'),
+      JSON.stringify(picked),
+    );
+    await vcPage.mouse.move(xAt(picked.time + 10), cueY);
+    await sleep(200);
+    const tip = await vcPage.evaluate(() => ({
+      text: document.querySelector('#visconf .vc-tooltip').textContent,
+      image: !document.querySelector('#visconf .vc-tooltip-thumb')?.hidden && /data:image/.test(document.querySelector('#visconf .vc-tooltip-thumb')?.style.backgroundImage ?? ''),
+    }));
+    check('The tooltip of the timeline shows the picture and the nickname of the preset', tip.image && tip.text.includes('Mein Liebling'), JSON.stringify(tip));
+    await vcPage.evaluate((name) => app.nicknames.set(name, ''), chosen);
+
     // Dragging a drop while the song has no visconf used to put an empty entry into the list and break saving.
     const withoutVisconf = await vcPage.evaluate(async () => {
       const panel = app.visconfPanel;
