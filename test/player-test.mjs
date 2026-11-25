@@ -141,6 +141,27 @@ try {
   await sleep(1500);
   const recordStart = { tab: await music.evaluate(() => ({ position: audio.currentTime, playing: !audio.paused })), recording: await page.evaluate(() => app.visconfPanel.recording) };
   check('"Record current song" plays the song in the tab from the start and records', recordStart.recording && recordStart.tab.playing && recordStart.tab.position < 4, JSON.stringify(recordStart));
+  // Closed while recording: a badge outside the editor says so. Key C sets a change where the song is heard.
+  await page.keyboard.press('Escape');
+  await sleep(400);
+  const badge = () => page.$eval('#visconf-badge', (element) => ({ hidden: element.hidden, recording: element.classList.contains('is-recording'), text: element.textContent }));
+  const closedBadge = await badge();
+  check('Closed while recording: a badge outside the editor shows the recording', !closedBadge.hidden && closedBadge.recording, JSON.stringify(closedBadge));
+  const cuesBefore = await page.evaluate(() => app.visconfPanel.state.visconf?.cues.length ?? 0);
+  const heardAt = await music.evaluate(() => audio.currentTime);
+  await page.keyboard.press('c');
+  await sleep(300);
+  const marked = await page.evaluate(() => ({ cues: app.visconfPanel.state.visconf?.cues.map((cue) => cue.time) ?? [], recording: app.visconfPanel.recording }));
+  const markedBadge = await badge();
+  const newest = marked.cues.find((time) => Math.abs(time - heardAt) < 3);
+  check(
+    'Key C sets a change where the song is, also with the editor closed and while recording',
+    marked.cues.length === cuesBefore + 1 && newest !== undefined && marked.recording && markedBadge.text.includes('·'),
+    JSON.stringify({ heardAt, marked, markedBadge }),
+  );
+  await page.click('#visconf-badge');
+  await page.waitForFunction(() => !document.getElementById('visconf').hidden, { timeout: 5000 });
+  check('A click on the badge opens the editor again; the badge goes away', (await badge()).hidden);
   await page.click('#visconf .vc-record');
   await sleep(300);
   await page.click('#visconf .vc-repeat input');
@@ -156,6 +177,18 @@ try {
   const songAfter = await page.evaluate(() => ({ title: app.visconfPanel.state.song.title, field: document.querySelector('#visconf .vc-title').value }));
   check('The open editor switches to the next song in the tab', songBefore === 'Test song' && songAfter.title === 'Second song' && songAfter.field === 'Second song', JSON.stringify({ songBefore, songAfter }));
   await music.evaluate(() => (navigator.mediaSession.metadata = new MediaMetadata({ title: 'Test song', artist: 'Test band', artwork: [{ src: '/cover.png' }] })));
+  // With the media player switched off in the menu, the editor still learns title and position from the tab.
+  const flipPlayerSetting = () =>
+    page.$eval('[data-setting="player.enabled"] input', (input) => {
+      input.checked = !input.checked;
+      input.dispatchEvent(new Event('change'));
+    });
+  await flipPlayerSetting();
+  await music.evaluate(() => (audio.currentTime = 20));
+  await page.waitForFunction(() => app.visconfPanel.state.song.title === 'Test song' && app.player.state?.position > 19, { timeout: 8000 }).catch(() => {});
+  const hiddenPlayer = await page.evaluate(() => ({ hidden: document.getElementById('player').hidden, song: app.visconfPanel.state.song.title, position: app.player.state?.position, clock: document.querySelector('#visconf .vc-clock').textContent }));
+  check('Media player off: the editor still knows song and position', hiddenPlayer.hidden && hiddenPlayer.song === 'Test song' && hiddenPlayer.position > 19, JSON.stringify(hiddenPlayer));
+  await flipPlayerSetting();
   await page.keyboard.press('Escape');
   await page.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers', 'visconfRepeat']));
 

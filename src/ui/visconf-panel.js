@@ -21,6 +21,8 @@ const DOUBLE_CLICK_MS = 350;
 const DRAG_START_PX = 3;
 const HISTORY_LIMIT = 100;
 const FIRED_SHOW_MS = 3000; // how long the live line and the timeline show a change that just happened
+const NOTE_SHOW_MS = 2500; // how long the badge outside the editor shows a short note
+const REACTION_SECONDS = 0.15; // a key press for a change comes this much after the moment that was meant
 const APPLY_KEY = 'visconfApply';
 const COLORS = {
   background: 'rgb(255 255 255 / 4%)',
@@ -38,7 +40,7 @@ const COLORS = {
   sections: ['rgb(255 205 90 / 14%)', 'rgb(160 120 255 / 14%)'],
 };
 
-export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, control, library, getLookahead, getInputPeak, onChange, store = createVisconfStore() }) {
+export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerState, seek, control, library, getLookahead, getInputPeak, onChange, store = createVisconfStore() }) {
   const $ = (selector) => root.querySelector(selector);
   const canvas = $('.vc-canvas');
   const tooltip = $('.vc-tooltip');
@@ -58,6 +60,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
   const clockLine = $('.vc-clock');
   const toggleButton = $('.vc-toggle');
   const repeatToggle = $('.vc-repeat input');
+  const markButton = $('.vc-mark');
 
   let open = false;
   let song = songOf({});
@@ -91,6 +94,12 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
   let fired = null; // { cue, preset, at } of the last change the plan made
   let liveText = '';
   let lastTabKey = null; // songKey of the song the tab played at the last frame
+  let badgeNote = null; // { text, until }: a short note on the badge while the editor is closed
+  let badgeText = '';
+  let anyPlans = false; // some song has a visconf: the player state is needed even with the player hidden
+  Promise.resolve(store.all?.() ?? [])
+    .then((all) => (anyPlans = anyPlans || all.length > 0))
+    .catch(() => {});
   const cuePlayer = createCuePlayer({
     resolvePreset: (cue) => {
       const milkdrop = getMilkdrop();
@@ -161,7 +170,10 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
     if (!target.song.title) return;
     try {
       if (target.markers) await store.saveMarkers(target.song, target.markers);
-      if (target.visconf) await store.save(target.visconf);
+      if (target.visconf) {
+        await store.save(target.visconf);
+        anyPlans = true;
+      }
     } catch (error) {
       console.error(error);
       setStatus(() => t('visconf.saveFailed', { error: error.message }));
@@ -338,6 +350,54 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
     if (!(length > 1)) return;
     await useAnalysis(finished.finish(length));
     setStatus(() => t('visconf.recorded'));
+  }
+
+  // "Change here" (key C): a new change where the song is heard right now, while listening. Works with the editor
+  // closed too, and during a recording, so the changes can be tapped in while the song is analysed.
+  function markChange() {
+    const position = playheadTime();
+    if (position === null || !song.title) {
+      note(() => t(tabSong() ? 'visconf.markOtherSong' : 'visconf.noTabSong'));
+      return false;
+    }
+    const time = snapTime(Math.max(0, position - REACTION_SECONDS), markers, snapToggle.checked);
+    if (visconf?.cues.some((cue) => Math.abs(cue.time - time) < 0.05)) {
+      note(() => t('visconf.markExists'));
+      return false;
+    }
+    remember();
+    ensureVisconf({ record: false });
+    const known = new Set(visconf.cues.map((cue) => cue.id));
+    update({ visconf: insertCue(visconf, time, { markers }) }, { record: false });
+    const added = visconf.cues.find((cue) => !known.has(cue.id));
+    if (!added) {
+      note(() => t('visconf.markExists'));
+      return false;
+    }
+    if (!recorder) selected = { kind: 'cue', id: added.id };
+    renderSelect();
+    renderInspector();
+    note(() => t('visconf.marked', { time: formatTime(added.time) }));
+    return true;
+  }
+  // A note in the status line, and on the badge while the editor is closed.
+  function note(message) {
+    setStatus(message);
+    badgeNote = { text: message(), until: performance.now() + NOTE_SHOW_MS };
+  }
+
+  // Outside the editor: a recording runs, or a short note (a change was set with C).
+  function renderBadge(nowMs, position) {
+    if (!badge) return;
+    const parts = [];
+    if (!open && recorder) parts.push(t('visconf.badgeRecording', { time: formatTime(position ?? 0).replace(/\.\d$/, '') }));
+    if (!open && badgeNote && nowMs < badgeNote.until) parts.push(badgeNote.text);
+    const text = parts.join(' · ');
+    if (text === badgeText) return;
+    badgeText = text;
+    badge.textContent = text;
+    badge.hidden = !text;
+    badge.classList.toggle('is-recording', !open && Boolean(recorder));
   }
 
   // --- Drawing ---
@@ -633,7 +693,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
     root.classList.toggle('is-recording', locked);
     if (!locked) return;
     for (const element of root.querySelectorAll('button, input, select')) {
-      if (element === recordButton || element.classList.contains('vc-close') || element.disabled) continue;
+      if (element === recordButton || element === markButton || element.classList.contains('vc-close') || element.disabled) continue;
       element.disabled = true;
       element.dataset.locked = '';
     }
@@ -660,6 +720,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
     for (const selector of ['.vc-to-start', '.vc-back', '.vc-forward']) $(selector).disabled = !canSeek;
     repeatToggle.disabled = !canSeek;
     recordButton.disabled = !recorder && !hasTab;
+    markButton.disabled = !isTabSong();
     const label = clock.playing ? '⏸' : '▶';
     if (toggleButton.textContent !== label) toggleButton.textContent = label;
     applyLock();
@@ -850,6 +911,8 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
     input.addEventListener('change', () => loadSong({ title: titleInput.value, artist: artistInput.value, duration: song.duration }));
   }
   recordButton.addEventListener('click', () => (recorder ? stopRecording() : startRecording()));
+  markButton.addEventListener('click', () => markChange());
+  badge?.addEventListener('click', () => api.show());
   const tabPosition = () => clock.position(performance.now() / 1000);
   const seekTo = (seconds) => {
     const length = getPlayerState()?.duration;
@@ -930,6 +993,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
     await store.remove(visconf.id);
     visconfs = visconfs.filter((entry) => entry.id !== visconf.id);
     visconf = visconfs[0] ?? null;
+    if (!visconfs.length) anyPlans = (await store.all()).length > 0;
     selected = null;
     cuePlayer.load(visconf);
     renderSelect();
@@ -1089,6 +1153,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
     async show() {
       open = true;
       root.hidden = false;
+      renderBadge(performance.now(), null);
       if (!song.title) {
         const current = tabSong();
         if (current) await loadSong(current);
@@ -1164,6 +1229,7 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
         }
       }
 
+      renderBadge(nowMs, position);
       if (!open) return;
       renderLive(position, nowMs);
       const heard = position ?? 0;
@@ -1190,6 +1256,12 @@ export function createVisconfPanel({ root, getMilkdrop, getPlayerState, seek, co
         draw(position);
       }
     },
+
+    // The player asks for the state of the tab even while it is hidden, if the editor needs it.
+    get needsPlayerState() {
+      return open || Boolean(recorder) || (playToggle.checked && anyPlans);
+    },
+    markChange,
 
     // For the smoke test and DevTools.
     get recording() {

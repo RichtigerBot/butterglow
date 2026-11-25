@@ -75,7 +75,7 @@ export function createDemoController(context) {
   };
 }
 
-export function createPlayer({ root, controller, settings }) {
+export function createPlayer({ root, controller, settings, needsState = () => false }) {
   const cover = root.querySelector('.player-cover');
   const title = root.querySelector('.player-title');
   const artist = root.querySelector('.player-artist');
@@ -162,8 +162,11 @@ export function createPlayer({ root, controller, settings }) {
     const position = POSITIONS.includes(settings.position) ? settings.position : 'bottom';
     for (const name of POSITIONS) root.classList.toggle(`at-${name}`, name === position);
     clearInterval(pollTimer);
-    pollTimer = settings.enabled ? setInterval(() => send('state'), POLL_MS) : null;
-    if (settings.enabled) send('state');
+    // Hidden, the player keeps polling only while someone needs the state (the visconf editor).
+    pollTimer = setInterval(() => {
+      if (settings.enabled || needsState()) send('state');
+    }, POLL_MS);
+    if (settings.enabled || needsState()) send('state');
   }
 
   for (const button of [previousButton, toggleButton, nextButton]) {

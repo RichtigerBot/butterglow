@@ -218,6 +218,7 @@ const keyActions = {
   v: () => activate((activeIndex + 1) % visualizers.length),
   e: () => equalizer?.toggle(),
   t: () => visconfPanel?.toggle(),
+  c: () => visconfPanel?.markChange(),
   // Browser, editor and reference stand side by side as far as the window allows (side-panels.js).
   b: () => presetBrowser?.toggle(),
   m: () => presetEditor?.toggle(),
@@ -281,6 +282,8 @@ window.addEventListener('keydown', (event) => {
   if (isTyping && event.key !== 'Escape') return;
   // On a button, the space bar already triggers the button itself.
   if (event.key === ' ' && event.target instanceof HTMLButtonElement) return;
+  // Ctrl+C, Ctrl+F and the like belong to the browser (and Ctrl+Z to the visconf editor).
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === ' ') event.preventDefault();
   const action = keyActions[event.key.length === 1 ? event.key.toLowerCase() : event.key];
   if (!action) return;
@@ -472,11 +475,14 @@ async function start() {
     root: document.getElementById('player'),
     controller,
     settings: settingsPanel.settingsFor('player', playerSettings),
+    // Hidden in the menu, the player still asks the tab for title and position if a visconf needs them.
+    needsState: () => Boolean(visconfPanel?.needsPlayerState),
   });
   if (params.has('streamId')) watchForSilence(controller);
 
   visconfPanel = createVisconfPanel({
     root: document.getElementById('visconf'),
+    badge: document.getElementById('visconf-badge'),
     getMilkdrop: () => (active?.selectPreset ? active : null),
     getPlayerState: () => player.state,
     seek: (fraction) => player.seek(fraction),

@@ -195,6 +195,7 @@
       </form>
       <div class="vc-transport">
         <button class="vc-record pb-tool" type="button" aria-pressed="false" title="Plays the song in the tab from the start and analyses it once" data-i18n-title="visconf.recordTitle">Record current song</button>
+        <button class="vc-mark pb-tool" type="button" title="A new change where the song is right now (key C, also with the editor closed)" data-i18n-title="visconf.markTitle" data-i18n="visconf.mark">+ Change here (C)</button>
         <button class="vc-to-start pb-tool" type="button" title="To the start" aria-label="To the start" data-i18n-title="visconf.toStart" data-i18n-aria-label="visconf.toStart">⏮</button>
         <button class="vc-back pb-tool" type="button" title="5 seconds back" aria-label="5 seconds back" data-i18n-title="visconf.back" data-i18n-aria-label="visconf.back">−5 s</button>
         <button class="vc-toggle pb-tool" type="button" title="Play / pause" aria-label="Play / pause" data-i18n-title="visconf.toggle" data-i18n-aria-label="visconf.toggle">▶</button>
@@ -213,9 +214,9 @@
         <button class="vc-redo pb-tool" type="button" disabled title="Redo (Ctrl+Y)" aria-label="Redo (Ctrl+Y)" data-i18n-title="visconf.redo" data-i18n-aria-label="visconf.redo">↷</button>
         <label class="vc-snap" title="Markers and changes snap to the beat grid" data-i18n-title="visconf.snapTitle"><input type="checkbox" checked /> <span data-i18n="visconf.snap">Snap to beat</span></label>
         <span class="vc-spacer"></span>
-        <button class="vc-draft pb-tool" type="button" title="Plan a change on every drop (hard) and quiet part (soft)" data-i18n-title="visconf.draftTitle" data-i18n="visconf.draft">Draft from markers</button>
-        <button class="vc-restore pb-tool" type="button" title="Back to the drops, quiet parts and tempo of the analysis" data-i18n-title="visconf.restoreTitle" data-i18n="visconf.restore">Restore analysis</button>
-        <button class="vc-fit pb-tool" type="button" title="Show the whole song" data-i18n-title="visconf.fitTitle" data-i18n="visconf.fit">Whole song</button>
+        <button class="vc-draft pb-tool" type="button" title="Makes a plan with a change on every drop and quiet part" data-i18n-title="visconf.draftTitle" data-i18n="visconf.draft">Plan from markers</button>
+        <button class="vc-restore pb-tool" type="button" title="Back to the markers of the analysis" data-i18n-title="visconf.restoreTitle" data-i18n="visconf.restore">Reset markers</button>
+        <button class="vc-fit pb-tool" type="button" title="Show the whole song" data-i18n-title="visconf.fitTitle" data-i18n="visconf.fit">Show all</button>
         <button class="vc-export pb-tool" type="button" title="Download all visconfs as a file" data-i18n-title="visconf.exportTitle" data-i18n="visconf.export">Export</button>
         <button class="vc-import pb-tool" type="button" title="Load visconfs from a file" data-i18n-title="visconf.importTitle" data-i18n="visconf.import">Import</button>
       </div>
@@ -230,6 +231,7 @@
       <datalist id="vc-preset-names"></datalist>
     </section>
 
+    <button id="visconf-badge" type="button" hidden title="Open the visconf editor (T)" data-i18n-title="visconf.badgeTitle"></button>
     <button id="status" hidden></button>
 
     <!-- Only appears if the script never runs (it removes this element first thing). No JavaScript, so both languages. -->

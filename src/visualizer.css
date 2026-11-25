@@ -41,7 +41,7 @@ body.menus-hidden {
   cursor: none;
 }
 
-body.menus-hidden :is(#hud, #debug, #player, #preset-browser, .preset-editor, #equalizer, #visconf, #status) {
+body.menus-hidden :is(#hud, #debug, #player, #preset-browser, .preset-editor, #equalizer, #visconf, #visconf-badge, #status) {
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
@@ -2012,4 +2012,53 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
   min-height: 1em;
   margin: 0;
   color: rgb(255 255 255 / 70%);
+}
+
+/* Outside the visconf editor: a recording runs, or a change was just set with C. A click opens the editor. */
+#visconf-badge {
+  position: fixed;
+  z-index: 5;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 6px 14px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  background: rgb(10 10 20 / 72%);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font: 500 13px system-ui, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+#visconf-badge[hidden] {
+  display: none;
+}
+
+#visconf-badge.is-recording::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: rgb(255 70 90);
+  vertical-align: 0;
+  animation: visconf-badge-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes visconf-badge-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #visconf-badge.is-recording::before {
+    animation: none;
+  }
 }
