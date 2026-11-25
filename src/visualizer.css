@@ -1946,7 +1946,6 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
 }
 
 #visconf .vc-play,
-#visconf .vc-repeat,
 #visconf .vc-snap {
   display: flex;
   align-items: center;
@@ -1961,6 +1960,48 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
 
 #visconf .vc-record[aria-pressed='true'] {
   background: rgb(255 70 100 / 55%);
+}
+
+/* Own icons in the media controls (icons.js): same height as the text buttons next to them. */
+#visconf .vc-transport .pb-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+#visconf .vc-to-start,
+#visconf .vc-toggle,
+#visconf .vc-end .pb-tool {
+  width: 32px;
+  padding: 0;
+}
+
+#visconf .pb-tool .icon {
+  flex: none;
+  display: block;
+}
+
+#visconf .vc-record[aria-pressed='true'] .icon {
+  animation: visconf-badge-pulse 1.2s ease-in-out infinite;
+}
+
+/* "At the end": two small toggles, repeat and stop, of which at most one is on. */
+#visconf .vc-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#visconf .vc-end-label {
+  margin-right: 2px;
+  color: rgb(255 255 255 / 70%);
+}
+
+#visconf .vc-end .pb-tool[aria-pressed='true'] {
+  color: #10161f;
+  background: rgb(140 220 255 / 90%);
 }
 
 #visconf .vc-timeline {
@@ -2058,7 +2099,8 @@ body:has(#hud-menu:not([hidden])):is(:not(.idle), :has(#hud.pinned)) #debug {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #visconf-badge.is-recording::before {
+  #visconf-badge.is-recording::before,
+  #visconf .vc-record[aria-pressed='true'] .icon {
     animation: none;
   }
 }

@@ -194,14 +194,18 @@
         <button type="button" data-action="cancel" data-i18n="browser.cancel">Cancel</button>
       </form>
       <div class="vc-transport">
-        <button class="vc-record pb-tool" type="button" aria-pressed="false" title="Plays the song in the tab from the start and analyses it once" data-i18n-title="visconf.recordTitle">Record current song</button>
+        <button class="vc-record pb-tool" type="button" aria-pressed="false" title="Plays the song in the tab from the start and analyses it once" data-i18n-title="visconf.recordTitle"></button>
         <button class="vc-mark pb-tool" type="button" title="A new change where the song is right now (key C, also with the editor closed)" data-i18n-title="visconf.markTitle" data-i18n="visconf.mark">+ Change here (C)</button>
-        <button class="vc-to-start pb-tool" type="button" title="To the start" aria-label="To the start" data-i18n-title="visconf.toStart" data-i18n-aria-label="visconf.toStart">⏮</button>
+        <button class="vc-to-start pb-tool" type="button" title="To the start" aria-label="To the start" data-i18n-title="visconf.toStart" data-i18n-aria-label="visconf.toStart"></button>
         <button class="vc-back pb-tool" type="button" title="5 seconds back" aria-label="5 seconds back" data-i18n-title="visconf.back" data-i18n-aria-label="visconf.back">−5 s</button>
-        <button class="vc-toggle pb-tool" type="button" title="Play / pause" aria-label="Play / pause" data-i18n-title="visconf.toggle" data-i18n-aria-label="visconf.toggle">▶</button>
+        <button class="vc-toggle pb-tool" type="button" title="Play / pause" aria-label="Play / pause" data-i18n-title="visconf.toggle" data-i18n-aria-label="visconf.toggle"></button>
         <button class="vc-forward pb-tool" type="button" title="5 seconds forward" aria-label="5 seconds forward" data-i18n-title="visconf.forward" data-i18n-aria-label="visconf.forward">+5 s</button>
         <span class="vc-clock">0:00.0 / 0:00.0</span>
-        <label class="vc-repeat" title="Start the song again from the beginning when it ends" data-i18n-title="visconf.repeatTitle"><input type="checkbox" /> <span data-i18n="visconf.repeat">Repeat</span></label>
+        <span class="vc-end" role="group" aria-label="At the end of the song" data-i18n-aria-label="visconf.endLabel">
+          <span class="vc-end-label" data-i18n="visconf.end">At the end</span>
+          <button class="vc-end-repeat pb-tool" type="button" aria-pressed="false" title="Repeat: start the song again from the beginning" aria-label="Repeat" data-i18n-title="visconf.repeatTitle" data-i18n-aria-label="visconf.repeat"></button>
+          <button class="vc-end-stop pb-tool" type="button" aria-pressed="false" title="Stop: pause the tab, so no next song starts" aria-label="Stop at the end" data-i18n-title="visconf.stopAtEndTitle" data-i18n-aria-label="visconf.stopAtEnd"></button>
+        </span>
         <span class="vc-spacer"></span>
         <span class="vc-live" role="status"></span>
         <label class="vc-play" title="Change the presets as planned whenever this song plays in the tab" data-i18n-title="visconf.playTitle"><input type="checkbox" checked /> <span data-i18n="visconf.play">Apply plan</span></label>

@@ -14,6 +14,7 @@ import { addDrop, beatsOf, createTapTempo, removeDrop, removeQuiet, setDownbeat,
 import { LAYOUT, applyDrag, followView, formatTime, fullView, hitTest, insertCue, scrollView, snapTime, timeToX, xToTime, zoomView } from '../visconf/timeline-geometry.js';
 import { ALL_PRESETS, FILE_NAME, createVisconf, cueAt, cuesFromMarkers, followMarkers, fromFile, removeCue, sameSong, songKey, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
 import { createVisconfStore } from '../visconf/visconf-store.js';
+import { setIcon } from './icons.js';
 import { createPresetPicker } from './preset-picker.js';
 import { loadPreviews, previewImage } from './preset-previews.js';
 
@@ -26,6 +27,9 @@ const FIRED_SHOW_MS = 3000; // how long the live line and the timeline show a ch
 const NOTE_SHOW_MS = 2500; // how long the badge outside the editor shows a short note
 const REACTION_SECONDS = 0.15; // a key press for a change comes this much after the moment that was meant
 const APPLY_KEY = 'visconfApply';
+const END_KEY = 'visconfEnd';
+const END_MODES = ['', 'repeat', 'stop'];
+const STOP_BEFORE_END_SECONDS = 0.3; // "Stop at the end" pauses the tab this long before the end of the song
 const COLORS = {
   background: 'rgb(255 255 255 / 4%)',
   wave: 'rgb(170 160 255 / 70%)',
@@ -61,7 +65,11 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
   const liveLine = $('.vc-live');
   const clockLine = $('.vc-clock');
   const toggleButton = $('.vc-toggle');
-  const repeatToggle = $('.vc-repeat input');
+  const repeatButton = $('.vc-end-repeat');
+  const stopAtEndButton = $('.vc-end-stop');
+  setIcon(repeatButton, 'repeat');
+  setIcon(stopAtEndButton, 'stopAtEnd');
+  setIcon($('.vc-to-start'), 'toStart');
   const markButton = $('.vc-mark');
   let previews = null; // preview images of the presets, loaded when the editor opens first
   let pickingFor = null; // id of the cue the picker chooses a preset for
@@ -101,6 +109,10 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
   let recorder = null;
   let recordWaiting = false; // the song was sent back to the start; recording begins once it is there
   let repeatDone = false; // the repeat for this end of the song has happened
+  let stopDone = false; // the tab was paused at this end of the song
+  // What happens at the end of the song in the tab: '' goes on as the tab does, 'repeat' starts it again from the
+  // beginning, 'stop' pauses the tab shortly before the end, so no next song starts (autoplay).
+  let endMode = '';
   let clockText = '';
   let status = null; // function, so it follows a language switch
   let dirty = true;
@@ -723,7 +735,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
     root.classList.toggle('is-recording', locked);
     if (!locked) return;
     for (const element of root.querySelectorAll('button, input, select')) {
-      if (element === recordButton || element === markButton || element.classList.contains('vc-close') || element.disabled) continue;
+      if (element === recordButton || element === markButton || element === stopAtEndButton || element.classList.contains('vc-close') || element.disabled) continue;
       element.disabled = true;
       element.dataset.locked = '';
     }
@@ -748,11 +760,13 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
     const canSeek = hasTab && Boolean(state?.canSeek);
     toggleButton.disabled = !hasTab;
     for (const selector of ['.vc-to-start', '.vc-back', '.vc-forward']) $(selector).disabled = !canSeek;
-    repeatToggle.disabled = !canSeek;
+    repeatButton.disabled = !canSeek;
+    stopAtEndButton.disabled = !hasTab;
+    repeatButton.setAttribute('aria-pressed', String(endMode === 'repeat'));
+    stopAtEndButton.setAttribute('aria-pressed', String(endMode === 'stop'));
     recordButton.disabled = !recorder && !hasTab;
     markButton.disabled = !isTabSong();
-    const label = clock.playing ? '⏸' : '▶';
-    if (toggleButton.textContent !== label) toggleButton.textContent = label;
+    setIcon(toggleButton, clock.playing ? 'pause' : 'play');
     applyLock();
   }
 
@@ -780,7 +794,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
     for (const selector of ['.vc-tap', '.vc-downbeat', '.vc-draft', '.vc-restore']) $(selector).disabled = !hasMarkers;
     $('.vc-restore').disabled = !analysis;
     recordButton.setAttribute('aria-pressed', String(Boolean(recorder)));
-    recordButton.textContent = t(recorder ? 'visconf.stopRecording' : 'visconf.record');
+    setIcon(recordButton, recorder ? 'stop' : 'record', t(recorder ? 'visconf.stopRecording' : 'visconf.record'));
     $('.vc-export').disabled = visconfs.length === 0 && !markers;
     applyLock();
   }
@@ -966,13 +980,24 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
   $('.vc-back').addEventListener('click', () => seekTo(tabPosition() - 5));
   $('.vc-forward').addEventListener('click', () => seekTo(tabPosition() + 5));
   toggleButton.addEventListener('click', () => control?.toggle?.());
-  repeatToggle.addEventListener('change', () => {
-    globalThis.chrome?.storage?.local?.set({ visconfRepeat: repeatToggle.checked }).catch?.(() => {});
-  });
+  // The two end buttons work like a pair of radio buttons that can also both be off: a click on the pressed one
+  // turns it off again.
+  function setEndMode(mode) {
+    endMode = END_MODES.includes(mode) ? mode : '';
+    globalThis.chrome?.storage?.local?.set({ [END_KEY]: endMode }).catch?.(() => {});
+    renderTransport();
+  }
+  repeatButton.addEventListener('click', () => setEndMode(endMode === 'repeat' ? '' : 'repeat'));
+  stopAtEndButton.addEventListener('click', () => setEndMode(endMode === 'stop' ? '' : 'stop'));
   globalThis.chrome?.storage?.local
-    ?.get('visconfRepeat')
+    ?.get([END_KEY, 'visconfRepeat'])
     .then((stored) => {
-      if (stored?.visconfRepeat === true) repeatToggle.checked = true;
+      // Before 0.1.3 there was only "Repeat", stored as visconfRepeat: true.
+      const mode = stored?.[END_KEY] ?? (stored?.visconfRepeat === true ? 'repeat' : '');
+      if (END_MODES.includes(mode) && mode !== endMode) {
+        endMode = mode;
+        renderTransport();
+      }
     })
     .catch?.(() => {});
   playToggle.addEventListener('change', () => {
@@ -1241,11 +1266,20 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
         if (frame.section.drop) recorder.drop(position, frame.section.dropStrength ?? 1);
       }
       if (recorder && !recordWaiting && atEnd) stopRecording();
-      if (atEnd && repeatToggle.checked && !repeatDone && !recorder && state?.canSeek) {
+      if (atEnd && endMode === 'repeat' && !repeatDone && !recorder && state?.canSeek) {
         repeatDone = true;
         seek(0).then(() => control?.play?.());
       }
-      if (position !== null && length > 0 && position < length - 2) repeatDone = false;
+      // Stop at the end: the tab itself has to pause before it reaches the end, or the next song starts. A short
+      // moment before is enough; the very end of a song is nearly always silent.
+      if (endMode === 'stop' && !stopDone && length > 0 && clock.playing && tabPosition() >= length - STOP_BEFORE_END_SECONDS) {
+        stopDone = true;
+        control?.pause?.();
+      }
+      if (position !== null && length > 0 && position < length - 2) {
+        repeatDone = false;
+        stopDone = false;
+      }
 
       const shouldPlay = playToggle.checked && visconf && position !== null && clock.playing;
       if (shouldPlay && !playing) playing = true;

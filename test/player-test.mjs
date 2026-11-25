@@ -164,12 +164,26 @@ try {
   check('A click on the badge opens the editor again; the badge goes away', (await badge()).hidden);
   await page.click('#visconf .vc-record');
   await sleep(300);
-  await page.click('#visconf .vc-repeat input');
+  const icons = await page.evaluate(() => ['.vc-record', '.vc-to-start', '.vc-toggle', '.vc-end-repeat', '.vc-end-stop'].every((selector) => document.querySelector(`#visconf ${selector} svg.icon`)));
+  check('The media controls show the own icons', icons);
+  await page.click('#visconf .vc-end-repeat');
   await music.evaluate(() => (audio.currentTime = 58.5));
   await music.waitForFunction(() => audio.currentTime < 6 && !audio.paused, { timeout: 10000 }).catch(() => {});
   const repeated = await music.evaluate(() => ({ position: audio.currentTime, playing: !audio.paused }));
   check('Repeat starts the song again at its end', repeated.playing && repeated.position < 6, JSON.stringify(repeated));
-  await page.click('#visconf .vc-repeat input');
+  // "Stop at the end" takes over from repeat: the tab pauses just before the end, so no next song would start.
+  await page.click('#visconf .vc-end-stop');
+  const endButtons = await page.evaluate(() => ({ repeat: document.querySelector('#visconf .vc-end-repeat').getAttribute('aria-pressed'), stop: document.querySelector('#visconf .vc-end-stop').getAttribute('aria-pressed') }));
+  await music.evaluate(() => (audio.currentTime = 57));
+  await music.waitForFunction(() => audio.paused, { timeout: 10000 }).catch(() => {});
+  const stopped = await music.evaluate(() => ({ position: audio.currentTime, paused: audio.paused, ended: audio.ended }));
+  check(
+    'Stop at the end pauses the tab shortly before the end, instead of repeating',
+    endButtons.repeat === 'false' && endButtons.stop === 'true' && stopped.paused && !stopped.ended && stopped.position > 58.5,
+    JSON.stringify({ endButtons, stopped }),
+  );
+  await page.click('#visconf .vc-end-stop');
+  await music.evaluate(() => audio.play());
   // The open editor follows when the tab moves on to another song.
   const songBefore = await page.evaluate(() => app.visconfPanel.state.song.title);
   await music.evaluate(() => (navigator.mediaSession.metadata = new MediaMetadata({ title: 'Second song', artist: 'Test band' })));
@@ -190,7 +204,7 @@ try {
   check('Media player off: the editor still knows song and position', hiddenPlayer.hidden && hiddenPlayer.song === 'Test song' && hiddenPlayer.position > 19, JSON.stringify(hiddenPlayer));
   await flipPlayerSetting();
   await page.keyboard.press('Escape');
-  await page.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers', 'visconfRepeat']));
+  await page.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers', 'visconfEnd']));
 
   // Position: bottom centre by default, changeable in the menu and saved.
   const box = () =>
