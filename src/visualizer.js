@@ -474,6 +474,11 @@ async function start() {
     root: document.getElementById('player'),
     controller,
     settings: settingsPanel.settingsFor('player', playerSettings),
+    volume: {
+      get: () => settingsPanel.settingsFor('audio', audioSettings).volume,
+      set: (percent) => settingsPanel.setValue('audio', 'volume', percent),
+      watch: (listener) => settingsPanel.watch('audio', listener),
+    },
   });
   if (params.has('streamId')) watchForSilence(controller);
 

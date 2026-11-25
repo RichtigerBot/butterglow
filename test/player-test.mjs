@@ -131,6 +131,81 @@ try {
   const position = await music.evaluate(() => audio.currentTime);
   check('Progress bar seeks in the tab', Math.abs(position - 30) < 2, `${position.toFixed(1)} s`);
 
+  // Visconf editor: "Record current song" starts the song in the tab from the beginning; Repeat starts it again at the end.
+  await page.mouse.move(640, 300);
+  await page.keyboard.press('t');
+  await page.waitForFunction(() => !document.getElementById('visconf').hidden, { timeout: 5000 });
+  await music.evaluate(() => audio.pause());
+  await sleep(1200);
+  await page.click('#visconf .vc-record');
+  await sleep(1500);
+  const recordStart = { tab: await music.evaluate(() => ({ position: audio.currentTime, playing: !audio.paused })), recording: await page.evaluate(() => app.visconfPanel.recording) };
+  check('"Record current song" plays the song in the tab from the start and records', recordStart.recording && recordStart.tab.playing && recordStart.tab.position < 4, JSON.stringify(recordStart));
+  // Closed while recording: a badge outside the editor says so. Key C sets a change where the song is heard.
+  await page.keyboard.press('Escape');
+  await sleep(400);
+  const badge = () => page.$eval('#visconf-badge', (element) => ({ hidden: element.hidden, recording: element.classList.contains('is-recording'), text: element.textContent }));
+  const closedBadge = await badge();
+  check('Closed while recording: a badge outside the editor shows the recording', !closedBadge.hidden && closedBadge.recording, JSON.stringify(closedBadge));
+  const cuesBefore = await page.evaluate(() => app.visconfPanel.state.visconf?.cues.length ?? 0);
+  const heardAt = await music.evaluate(() => audio.currentTime);
+  await page.keyboard.press('c');
+  await sleep(300);
+  const marked = await page.evaluate(() => ({ cues: app.visconfPanel.state.visconf?.cues.map((cue) => cue.time) ?? [], recording: app.visconfPanel.recording }));
+  const markedBadge = await badge();
+  const newest = marked.cues.find((time) => Math.abs(time - heardAt) < 3);
+  check(
+    'Key C sets a change where the song is, also with the editor closed and while recording',
+    marked.cues.length === cuesBefore + 1 && newest !== undefined && marked.recording && markedBadge.text.includes('·'),
+    JSON.stringify({ heardAt, marked, markedBadge }),
+  );
+  await page.click('#visconf-badge');
+  await page.waitForFunction(() => !document.getElementById('visconf').hidden, { timeout: 5000 });
+  check('A click on the badge opens the editor again; the badge goes away', (await badge()).hidden);
+  await page.click('#visconf .vc-record');
+  await sleep(300);
+  const icons = await page.evaluate(() => ['.vc-record', '.vc-to-start', '.vc-toggle', '.vc-end-repeat', '.vc-end-stop'].every((selector) => document.querySelector(`#visconf ${selector} svg.icon`)));
+  check('The media controls show the own icons', icons);
+  await page.click('#visconf .vc-end-repeat');
+  await music.evaluate(() => (audio.currentTime = 58.5));
+  await music.waitForFunction(() => audio.currentTime < 6 && !audio.paused, { timeout: 10000 }).catch(() => {});
+  const repeated = await music.evaluate(() => ({ position: audio.currentTime, playing: !audio.paused }));
+  check('Repeat starts the song again at its end', repeated.playing && repeated.position < 6, JSON.stringify(repeated));
+  // "Stop at the end" takes over from repeat: the tab pauses just before the end, so no next song would start.
+  await page.click('#visconf .vc-end-stop');
+  const endButtons = await page.evaluate(() => ({ repeat: document.querySelector('#visconf .vc-end-repeat').getAttribute('aria-pressed'), stop: document.querySelector('#visconf .vc-end-stop').getAttribute('aria-pressed') }));
+  await music.evaluate(() => (audio.currentTime = 57));
+  await music.waitForFunction(() => audio.paused, { timeout: 10000 }).catch(() => {});
+  const stopped = await music.evaluate(() => ({ position: audio.currentTime, paused: audio.paused, ended: audio.ended }));
+  check(
+    'Stop at the end pauses the tab shortly before the end, instead of repeating',
+    endButtons.repeat === 'false' && endButtons.stop === 'true' && stopped.paused && !stopped.ended && stopped.position > 58.5,
+    JSON.stringify({ endButtons, stopped }),
+  );
+  await page.click('#visconf .vc-end-stop');
+  await music.evaluate(() => audio.play());
+  // The open editor follows when the tab moves on to another song.
+  const songBefore = await page.evaluate(() => app.visconfPanel.state.song.title);
+  await music.evaluate(() => (navigator.mediaSession.metadata = new MediaMetadata({ title: 'Second song', artist: 'Test band' })));
+  await page.waitForFunction(() => app.visconfPanel.state.song.title === 'Second song', { timeout: 8000 }).catch(() => {});
+  const songAfter = await page.evaluate(() => ({ title: app.visconfPanel.state.song.title, field: document.querySelector('#visconf .vc-title').value }));
+  check('The open editor switches to the next song in the tab', songBefore === 'Test song' && songAfter.title === 'Second song' && songAfter.field === 'Second song', JSON.stringify({ songBefore, songAfter }));
+  await music.evaluate(() => (navigator.mediaSession.metadata = new MediaMetadata({ title: 'Test song', artist: 'Test band', artwork: [{ src: '/cover.png' }] })));
+  // With the media player switched off in the menu, the editor still learns title and position from the tab.
+  const flipPlayerSetting = () =>
+    page.$eval('[data-setting="player.enabled"] input', (input) => {
+      input.checked = !input.checked;
+      input.dispatchEvent(new Event('change'));
+    });
+  await flipPlayerSetting();
+  await music.evaluate(() => (audio.currentTime = 20));
+  await page.waitForFunction(() => app.visconfPanel.state.song.title === 'Test song' && app.player.state?.position > 19, { timeout: 8000 }).catch(() => {});
+  const hiddenPlayer = await page.evaluate(() => ({ hidden: document.getElementById('player').hidden, song: app.visconfPanel.state.song.title, position: app.player.state?.position, clock: document.querySelector('#visconf .vc-clock').textContent }));
+  check('Media player off: the editor still knows song and position', hiddenPlayer.hidden && hiddenPlayer.song === 'Test song' && hiddenPlayer.position > 19, JSON.stringify(hiddenPlayer));
+  await flipPlayerSetting();
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => chrome.storage.local.remove(['visconfs', 'songAnalyses', 'songMarkers', 'visconfEnd']));
+
   // "When the music stops": the Milkdrop picture stands still while the tab is paused, and goes on afterwards.
   const whenStopped = (value) =>
     page.evaluate((choice) => {
@@ -158,6 +233,45 @@ try {
     hasSetting && pausedPicture === true && runningAgain === false && keptRunning === false,
     JSON.stringify({ hasSetting, pausedPicture, runningAgain, keptRunning }),
   );
+
+  // Volume in the player: the same value as in the menu, both ways, with mute, and saved.
+  await page.mouse.move(640, 300);
+  const volumeState = () =>
+    page.evaluate(() => ({
+      player: Number(document.querySelector('.player-volume').value),
+      shown: document.querySelector('.player-volume-value').textContent,
+      menu: Number(document.querySelector('[data-setting="audio.volume"] input').value),
+      setting: app.engine.volume.gain.value,
+    }));
+  await page.$eval('.player-volume', (input) => {
+    input.value = '40';
+    input.dispatchEvent(new Event('input'));
+  });
+  await sleep(400);
+  const fromPlayer = await volumeState();
+  await page.$eval('[data-setting="audio.volume"] input', (input) => {
+    input.value = '70';
+    input.dispatchEvent(new Event('input'));
+  });
+  await sleep(400);
+  const fromMenu = await volumeState();
+  await page.click('.player-mute');
+  await sleep(400);
+  const muted = await volumeState();
+  await page.click('.player-mute');
+  await sleep(600);
+  const unmuted = await volumeState();
+  const saved = await page.evaluate(async () => (await chrome.storage.local.get('hud')).hud?.values?.audio?.volume);
+  check(
+    'The volume slider in the player and the one in the menu show the same value, mute works, and it is saved',
+    fromPlayer.player === 40 && fromPlayer.menu === 40 && fromPlayer.shown === '40 %' && fromMenu.player === 70 && muted.player === 0 && muted.menu === 0 && unmuted.player === 70 && saved === 70,
+    JSON.stringify({ fromPlayer, fromMenu, muted, unmuted, saved }),
+  );
+  check('The player volume really changes the sound', Math.abs(fromMenu.setting - 0.49) < 0.05 || Math.abs(unmuted.setting - 0.49) < 0.05, JSON.stringify({ fromMenu, unmuted }));
+  await page.$eval('.player-volume', (input) => {
+    input.value = '100';
+    input.dispatchEvent(new Event('input'));
+  });
 
   // Position: bottom centre by default, changeable in the menu and saved.
   const box = () =>

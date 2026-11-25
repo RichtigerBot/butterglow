@@ -74,7 +74,9 @@ export function createDemoController(context) {
   };
 }
 
-export function createPlayer({ root, controller, settings }) {
+// `volume`: { get(), set(percent), watch(listener) } for the extension's own volume (the audio setting), so the
+// slider here and the one in the menu always show the same value.
+export function createPlayer({ root, controller, settings, volume = null }) {
   const cover = root.querySelector('.player-cover');
   const title = root.querySelector('.player-title');
   const artist = root.querySelector('.player-artist');
@@ -176,6 +178,33 @@ export function createPlayer({ root, controller, settings }) {
     seeking = false;
     send('seek', Number(progress.value) / 1000);
   });
+
+  // Volume: the same value as "Volume" in the menu. The speaker mutes and brings the previous level back.
+  const volumeRow = root.querySelector('.player-volume-row');
+  const volumeInput = root.querySelector('.player-volume');
+  const volumeValue = root.querySelector('.player-volume-value');
+  const muteButton = root.querySelector('.player-mute');
+  let beforeMute = 100;
+  function showVolume(percent) {
+    volumeInput.value = String(percent);
+    volumeValue.textContent = `${percent} %`;
+    muteButton.setAttribute('aria-pressed', String(percent === 0));
+    muteButton.title = t(percent === 0 ? 'player.unmute' : 'player.mute');
+    muteButton.setAttribute('aria-label', muteButton.title);
+  }
+  if (volume) {
+    showVolume(volume.get());
+    volume.watch((audio) => showVolume(audio.volume));
+    volumeInput.addEventListener('input', () => volume.set(Number(volumeInput.value)));
+    muteButton.addEventListener('click', () => {
+      const current = volume.get();
+      if (current > 0) beforeMute = current;
+      volume.set(current > 0 ? 0 : beforeMute || 100);
+    });
+    // Arrow keys on the slider change the volume, not the preset.
+    volumeInput.addEventListener('keydown', (event) => event.stopPropagation());
+    onLanguageChange(() => showVolume(volume.get()));
+  } else volumeRow.hidden = true;
 
   applySettings();
 
