@@ -13,11 +13,14 @@ import { createFrameScheduler } from './ui/frame-scheduler.js';
 import { createPresetBrowser } from './ui/preset-browser.js';
 import { createPresetEditor } from './ui/preset-editor.js';
 import { createSidePanels } from './ui/side-panels.js';
+import { createVisconfPanel } from './ui/visconf-panel.js';
+import { createNicknames } from './ui/preset-previews.js';
 import { PresetLibrary } from './ui/preset-library.js';
 import { createQuality, qualitySettings } from './ui/quality.js';
 import { createSettingsPanel } from './ui/settings-panel.js';
 import { renderPresetPreviews, setMilkdropMeasuring } from './visualizers/milkdrop.js';
 import { visualizers } from './visualizers/index.js';
+import { backupFileName, createBackup, parseBackup, restoreBackup } from './backup/backup.js';
 import { loadLanguage, onLanguageChange, t, translateDom } from './i18n/i18n.js';
 
 const HUD_IDLE_MS = 3000;
@@ -54,6 +57,9 @@ let water = null;
 let presetBrowser = null;
 let presetEditor = null;
 let presetReference = null;
+let visconfPanel = null;
+const nicknames = createNicknames();
+nicknames.onChange(() => updateHud());
 let sidePanels = null;
 let player = null;
 let library = null;
@@ -75,7 +81,7 @@ function showStatus(message, { onClick } = {}) {
 
 function updateHud() {
   hudTitle.textContent = visualizers[activeIndex]?.name ?? '';
-  hudSubtitle.textContent = active?.presetName ?? '';
+  hudSubtitle.textContent = active?.presetName ? nicknames.display(active.presetName) : '';
   hudSubtitle.title = active?.poolFallback ? t('hud.emptyCollection') : '';
   presetBrowser?.update();
   presetEditor?.update();
@@ -146,13 +152,63 @@ function musicStopped() {
   return state.playing === false;
 }
 
+// Backup (settings menu): everything in one file, and back. Called from clicks, so the presets folder may ask for
+// access. After reading a backup the page starts again, so every part loads the restored values.
+const RESTORED_KEY = 'butterglowBackupRestored';
+function backupActions() {
+  const store = () => customPresets?.store ?? null;
+  // Access to the presets folder, if the browser has one and it is not granted yet (needs the click).
+  const access = async () => {
+    const current = store();
+    if (current && current.state === 'prompt') await current.connect().catch(() => {});
+    return current;
+  };
+  return {
+    async exportAll() {
+      const backup = await createBackup({ storage: chrome.storage.local, customStore: await access(), extensionVersion: chrome.runtime.getManifest().version });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
+      link.download = backupFileName();
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      const presets = backup.presets.length;
+      return backup.presetsIncluded || store()?.state === 'none' ? () => t('backup.saved', { presets }) : () => t('backup.savedWithoutPresets');
+    },
+    async read(file) {
+      const backup = parseBackup(await file.text());
+      const date = new Date(backup.created);
+      return {
+        summary: () => t('backup.summary', { date: Number.isNaN(date.getTime()) ? '?' : date.toLocaleString(), presets: backup.presets.length }),
+        async apply() {
+          let target = await access();
+          // A browser with folder access, but no folder chosen yet: the presets need one.
+          if (backup.presets.length && target?.state === 'none') await target.connect().catch(() => {});
+          target = store();
+          const result = await restoreBackup(backup, { storage: chrome.storage.local, customStore: target });
+          sessionStorage.setItem(RESTORED_KEY, JSON.stringify(result));
+          location.reload();
+        },
+      };
+    },
+  };
+}
+function reportRestoredBackup() {
+  const stored = sessionStorage.getItem(RESTORED_KEY);
+  if (!stored) return;
+  sessionStorage.removeItem(RESTORED_KEY);
+  const { presets, presetsSkipped } = JSON.parse(stored);
+  showStatus(() => (presetsSkipped ? t('backup.restoredWithoutPresets', { presets, skipped: presetsSkipped }) : t('backup.restored', { presets })), { onClick: () => (status.hidden = true) });
+}
+
 function renderFrame(now) {
   const started = performance.now();
   const frame = engine.readFrame();
   lastFrame = frame;
   // Automatic switch. If the visualizer already exists, activate() switches immediately, and the new one draws
   // this very frame, so on a drop with its drop effect.
-  const busy = switching || crossfade.running || presetEditor?.open || presetReference?.open || presetBrowser?.open;
+  // A playing visconf decides the presets itself, so the visualizer stays where it is.
+  visconfPanel?.frame(frame, now);
+  const busy = switching || crossfade.running || presetEditor?.open || presetReference?.open || presetBrowser?.open || visconfPanel?.playing;
   const decision = autoSwitch?.update(frame, now / 1000, { current: activeIndex, busy });
   if (decision) activate(decision.index, { durationMs: decision.durationMs });
   active?.render(frame);
@@ -221,6 +277,8 @@ async function toggleFullscreen() {
 const keyActions = {
   v: () => activate((activeIndex + 1) % visualizers.length),
   e: () => equalizer?.toggle(),
+  t: () => visconfPanel?.toggle(),
+  c: () => visconfPanel?.markChange(),
   // Browser, editor and reference stand side by side as far as the window allows (side-panels.js).
   b: () => presetBrowser?.toggle(),
   m: () => presetEditor?.toggle(),
@@ -231,6 +289,7 @@ const keyActions = {
     presetBrowser?.close();
     presetEditor?.close();
     presetReference?.close();
+    visconfPanel?.close();
   },
   f: toggleFullscreen,
   ArrowRight: () => active?.nextPreset?.(),
@@ -279,10 +338,12 @@ window.addEventListener('keydown', (event) => {
   if (isControl && event.key.startsWith('Arrow')) return;
   // While typing in a text field (search, name of a collection), letters do not count as shortcuts.
   const isTyping =
-    event.target instanceof HTMLTextAreaElement || (event.target instanceof HTMLInputElement && ['text', 'search'].includes(event.target.type));
+    event.target instanceof HTMLTextAreaElement || (event.target instanceof HTMLInputElement && ['text', 'search', 'number'].includes(event.target.type));
   if (isTyping && event.key !== 'Escape') return;
   // On a button, the space bar already triggers the button itself.
   if (event.key === ' ' && event.target instanceof HTMLButtonElement) return;
+  // Ctrl+C, Ctrl+F and the like belong to the browser (and Ctrl+Z to the visconf editor).
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === ' ') event.preventDefault();
   const action = keyActions[event.key.length === 1 ? event.key.toLowerCase() : event.key];
   if (!action) return;
@@ -295,7 +356,7 @@ let idleTimer;
 function wake() {
   document.body.classList.remove('idle');
   clearTimeout(idleTimer);
-  if (equalizer?.open || presetBrowser?.open || presetEditor?.open || presetReference?.open) return;
+  if (equalizer?.open || presetBrowser?.open || presetEditor?.open || presetReference?.open || visconfPanel?.open) return;
   idleTimer = setTimeout(goIdle, HUD_IDLE_MS);
 }
 // An open dropdown would otherwise be left standing alone when the menu hides. So while a select has
@@ -397,6 +458,7 @@ async function start() {
     hud: document.getElementById('hud'),
     library,
     customPresets,
+    nicknames,
     getVisualizer: () => active,
     onChange: () => {
       sidePanels?.layout();
@@ -447,7 +509,9 @@ async function start() {
     ],
     onSelectVisualizer: (index) => activate(index),
     onPinChange: wake,
+    backup: backupActions(),
   });
+  reportRestoredBackup();
 
   engine.applySettings(settingsPanel.settingsFor('audio', audioSettings));
   displaySettings = settingsPanel.settingsFor('display', DISPLAY_SCHEMA);
@@ -479,8 +543,24 @@ async function start() {
       set: (percent) => settingsPanel.setValue('audio', 'volume', percent),
       watch: (listener) => settingsPanel.watch('audio', listener),
     },
+    // Hidden in the menu, the player still asks the tab for title and position if a visconf needs them.
+    needsState: () => Boolean(visconfPanel?.needsPlayerState),
   });
   if (params.has('streamId')) watchForSilence(controller);
+
+  visconfPanel = createVisconfPanel({
+    root: document.getElementById('visconf'),
+    badge: document.getElementById('visconf-badge'),
+    getMilkdrop: () => (active?.selectPreset ? active : null),
+    getPlayerState: () => player.state,
+    seek: (fraction) => player.seek(fraction),
+    control: player,
+    library,
+    nicknames,
+    getLookahead: () => engine.lookahead,
+    getInputPeak: () => engine.inputPeak(),
+    onChange: wake,
+  });
 
   // The water is a bonus: if WebGL 2 is missing, the rest keeps running without it.
   try {
@@ -547,6 +627,12 @@ globalThis.app = {
   },
   get presetReference() {
     return presetReference;
+  },
+  get nicknames() {
+    return nicknames;
+  },
+  get visconfPanel() {
+    return visconfPanel;
   },
   get equalizer() {
     return equalizer;

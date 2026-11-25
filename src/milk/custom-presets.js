@@ -8,7 +8,7 @@ export const EDITED_SUFFIX = ' (edited)';
 const OLD_EDITED_SUFFIX = ' (bearbeitet)'; // earlier versions; such files are saved back in place
 
 // Rough check when opening: a [preset00] section or typical keys of a .milk file.
-const looksLikeMilk = (text) => /^\s*\[preset\d*\]/im.test(text) || /^\s*(MILKDROP_PRESET_VERSION|fDecay|zoom|per_frame_1)\s*=/im.test(text);
+export const looksLikeMilk = (text) => /^\s*\[preset\d*\]/im.test(text) || /^\s*(MILKDROP_PRESET_VERSION|fDecay|zoom|per_frame_1)\s*=/im.test(text);
 
 export function createCustomPresets(store) {
   const entries = new Map(); // Name → { preset, folder, fileName, basedOn, warnings }
