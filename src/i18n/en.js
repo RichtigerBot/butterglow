@@ -129,6 +129,9 @@ export default {
       every: 'Every {seconds} s',
       everyMinute: 'Every minute',
       dropChange: 'Change preset on a drop',
+      whenStopped: 'When the music stops',
+      keepRunning: 'Keep running',
+      pause: 'Pause the picture',
     },
     autoSwitch: {
       mode: 'Switch visualizer automatically',
