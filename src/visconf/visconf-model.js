@@ -9,7 +9,7 @@ import { normalizeMarkers } from './song-markers.js';
 
 export const FILE_KIND = 'butterglow-visconfs';
 export const FILE_VERSION = 1;
-export const FILE_NAME = 'butterglow-visconfs.json';
+const FILE_NAME_PART_LENGTH = 60;
 export const TRANSITIONS = ['cut', 'soft'];
 export const ORIGINS = ['drop', 'quiet', 'manual', 'live'];
 export const ALL_PRESETS = 'all'; // same id as the "All" collection in the preset library
@@ -36,6 +36,28 @@ export function normalizeTitle(value) {
 // The song a visconf belongs to. `duration` in seconds, 0 if unknown.
 export function songOf({ title, artist, duration } = {}) {
   return { title: text(title), artist: text(artist), duration: Number.isFinite(duration) && duration > 0 ? round(duration) : 0 };
+}
+
+// One part of a file name: no characters that a system forbids (/ \ : * ? " < > |), no spaces, short enough.
+function fileNamePart(value) {
+  return text(value)
+    .normalize('NFC')
+    .replace(/[\\/:*?"<>|_\u0000-\u001f]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, FILE_NAME_PART_LENGTH)
+    .replace(/[-.]+$/, '');
+}
+
+// Name for an export: "Artist_Title_2026-11-25_21-30.json" with the song open in the editor and the local time.
+// A colon is not allowed in file names on Windows, so the time uses a hyphen. Without a song: "visconf_…".
+export function exportFileName(song, date = new Date()) {
+  const pad = (number) => String(number).padStart(2, '0');
+  const stamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}`;
+  const parts = [fileNamePart(song?.artist), fileNamePart(song?.title)].filter(Boolean);
+  return `${(parts.length ? parts : ['visconf']).join('_')}_${stamp}.json`;
 }
 
 // "Artist - Title (Official Video).mp3" → { artist, title }; without " - " everything is the title.

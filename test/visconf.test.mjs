@@ -16,6 +16,7 @@ import {
   snapToBeat,
   toFile,
   updateCue,
+  exportFileName,
 } from '../src/visconf/visconf-model.js';
 import {
   addDrop,
@@ -370,4 +371,15 @@ test('The store keeps hand-made markers across a new analysis and can reset them
   assert.deepEqual((await store.resetMarkers(SONG)).drops.map(({ time }) => time), [30]);
   await store.merge({ markers: { [Object.keys(await store.markers())[0]]: addDrop(markersFromAnalysis(ANALYSIS), 1) } });
   assert.equal((await store.markersFor(SONG)).drops[0].time, 1, 'imported markers replace');
+});
+
+test('The export file name has artist, title, date and time, and is valid on every system', () => {
+  const date = new Date(2026, 10, 5, 9, 7);
+  assert.equal(exportFileName({ artist: 'Daft Punk', title: 'One More Time' }, date), 'Daft-Punk_One-More-Time_2026-11-05_09-07.json');
+  assert.equal(exportFileName({ artist: 'AC/DC', title: 'What? <Live>: "Part 1" | 2' }, date), 'AC-DC_What-Live-Part-1-2_2026-11-05_09-07.json');
+  assert.equal(exportFileName({ artist: '', title: 'only_title' }, date), 'only-title_2026-11-05_09-07.json');
+  assert.equal(exportFileName({ artist: ' ', title: '' }, date), 'visconf_2026-11-05_09-07.json');
+  assert.equal(exportFileName(null, date), 'visconf_2026-11-05_09-07.json');
+  const long = exportFileName({ artist: 'A'.repeat(100), title: 'Ä Ö Ü' }, date);
+  assert.equal(long, `${'A'.repeat(60)}_Ä-Ö-Ü_2026-11-05_09-07.json`);
 });

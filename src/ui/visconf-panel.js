@@ -12,7 +12,7 @@ import { createCuePlayer, createSongClock, resolvePreset } from '../visconf/cue-
 import { analyzeSong, createSongRecorder, decodeSong } from '../visconf/song-analysis.js';
 import { addDrop, beatsOf, createTapTempo, removeDrop, removeQuiet, setDownbeat, setTempo } from '../visconf/song-markers.js';
 import { LAYOUT, applyDrag, followView, formatTime, fullView, hitTest, insertCue, scrollView, snapTime, timeToX, xToTime, zoomView } from '../visconf/timeline-geometry.js';
-import { ALL_PRESETS, FILE_NAME, createVisconf, cueAt, cuesFromMarkers, followMarkers, fromFile, removeCue, sameSong, songKey, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
+import { ALL_PRESETS, createVisconf, cueAt, cuesFromMarkers, exportFileName, followMarkers, fromFile, removeCue, sameSong, songKey, songFromFileName, songOf, toFile, updateCue } from '../visconf/visconf-model.js';
 import { createVisconfStore } from '../visconf/visconf-store.js';
 import { setIcon } from './icons.js';
 import { createPresetPicker } from './preset-picker.js';
@@ -1116,7 +1116,7 @@ export function createVisconfPanel({ root, badge = null, getMilkdrop, getPlayerS
     const file = toFile(await store.all(), await store.analyses(), await store.markers());
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([file], { type: 'application/json' }));
-    link.download = FILE_NAME;
+    link.download = exportFileName(song);
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   });

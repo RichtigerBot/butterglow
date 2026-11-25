@@ -1406,6 +1406,20 @@ try {
     await sleep(300);
     check('The live line says when the plan is off', await vcPage.evaluate(() => app.visconfPanel.state.live === 'Plan is off'));
 
+    // Export: the file is named after the song in the editor, with date and time.
+    const exportName = await vcPage.evaluate(async () => {
+      const original = HTMLAnchorElement.prototype.click;
+      let name = null;
+      HTMLAnchorElement.prototype.click = function () {
+        name = this.download;
+      };
+      document.querySelector('#visconf .vc-export').click();
+      for (let i = 0; i < 50 && name === null; i++) await new Promise((done) => setTimeout(done, 50));
+      HTMLAnchorElement.prototype.click = original;
+      return name;
+    });
+    check('The export is named after artist and song, with date and time', /^ButterGlow_Demo-Beat_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.json$/.test(exportName ?? ''), exportName);
+
     // Media controls and "Record current song": everything else is locked, closing only hides the editor.
     const transport = await vcPage.evaluate(() => ({
       toggle: !document.querySelector('#visconf .vc-toggle').disabled,
